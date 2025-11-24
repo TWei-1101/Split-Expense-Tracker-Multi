@@ -1763,7 +1763,7 @@
                     <p className="text-lg font-medium text-green-600 p-3 bg-green-50 rounded-lg">🎉 所有帳目已結清！</p>
                 ) : (
                     <div className="space-y-4">
-                        <p className="text-base text-gray-600 mb-4">以下是結清帳目所需的轉帳清單（四捨五入）：</p>
+                        <p className="text-base text-gray-600 mb-4">結清帳目所需的轉帳清單（已四捨五入）：</p>
                         {settlements.map((settlement, index) => {
                             const isUserDebtor = settlement.from === currentCollectionId; // 我是付款人 (應付)
                             const isUserCreditor = settlement.to === currentCollectionId; // 我是收款人 (應收)
