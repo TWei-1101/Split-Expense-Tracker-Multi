@@ -288,6 +288,8 @@
             const handleBackToOwn = () => {
                 if (userId && currentCollectionId !== userId) {
                     setCurrentCollectionId(userId);
+                    setCopyMessage('已切換回您的私有紀錄簿。');
+                    setTimeout(() => setCopyMessage(''), 4000);
                 }
             };
 
@@ -341,12 +343,6 @@
                                 {/* 修正：顯示暱稱/簡短ID，如果是共享模式，加上 (共享中) 標記 */}
                                 {collectionDisplay} {!isViewingOwn && <span className="text-sm font-normal">(共享中)</span>}
                             </p>
-                            {!isViewingOwn && (
-                                <button onClick={handleBackToOwn} className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1">
-                                    <RefreshCw className="w-4 h-4 mr-1" />
-                                    切換回自己的紀錄簿
-                                </button>
-                            )}
                         </div>
                         <button 
                             onClick={logout}
@@ -360,15 +356,25 @@
                     <div className="mt-3 pt-3 border-t border-primaryColor-100 space-y-3">
                         <h4 className="font-semibold text-sm text-gray-700 mb-2">共享設定與切換</h4>
                         
-                        {/* 新增: 分享連結按鈕 */}
-                        <button 
-                            onClick={handleCopyLink}
-                            className={`w-full flex items-center justify-center py-2 px-4 border border-primaryColor-600 text-sm font-bold rounded-lg text-white bg-primaryColor-500 hover:bg-primaryColor-600 transition hover:scale-[1.01] transform`}
-                            title="生成並複製可分享的連結"
-                        >
-                            <Share2 className="w-5 h-5 mr-2" />
-                            生成並複製分享連結
-                        </button>
+                        <div className="flex space-x-2">
+                            {/* 新增: 分享連結按鈕 */}
+                            <button 
+                                onClick={handleCopyLink}
+                                className={`flex-1 flex items-center justify-center py-2 px-4 border border-primaryColor-600 text-sm font-bold rounded-lg text-white bg-primaryColor-500 hover:bg-primaryColor-600 transition hover:scale-[1.01] transform`}
+                                title="生成並複製可分享的連結"
+                            >
+                                <Share2 className="w-5 h-5 mr-2" />
+                                複製分享連結
+                            </button>
+                            
+                            {/* 新增: 切回自己紀錄簿按鈕 (只在共享模式下顯示) */}
+                            {!isViewingOwn && (
+                                <button onClick={handleBackToOwn} className="w-1/2 flex items-center justify-center py-2 px-4 border border-blue-500 text-sm font-bold rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition hover:scale-[1.01] transform">
+                                    <RefreshCw className="w-4 h-4 mr-1" />
+                                    切回我的紀錄簿
+                                </button>
+                            )}
+                        </div>
 
                         <p className="text-xs text-gray-500 mb-3">
                             您的專屬 ID (UID) 是: 
@@ -1311,7 +1317,7 @@
             if (memberId === currentCollectionId) {
                 // 如果找不到暱稱，則顯示 UID 的簡短形式
                 const shortId = memberId.substring(0, 5) + '...' + memberId.substring(memberId.length - 5);
-                return `${shortId} (擁有者)`; 
+                return `${shortId}`; // 移除 (擁有者)，讓 CollectionSwitch 負責添加標記
             }
             
             // 4. 其他成員 (自訂名稱或找不到的 UID)
