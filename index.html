@@ -102,6 +102,7 @@
         const UserMinus = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" x2="16" y1="11" y2="11"></line></svg>;
         const LogOut = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg>;
         const RefreshCw = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.76 2.91L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.76-2.91L21 16"></path><path d="M21 21v-5h-5"></path></svg>;
+        const Share2 = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"></line><line x1="15.42" x2="8.59" y1="6.51" y2="10.49"></line></svg>;
         // --- 圖標元件結束 ---
 
         /**
@@ -150,7 +151,7 @@
                     if (isLogin) {
                         userCredential = await auth.signInWithEmailAndPassword(email, password);
                         
-                        // 修正 1: 登入後，如果 Auth Profile 有暱稱，就使用它；否則使用 Email
+                        // 登入後，如果 Auth Profile 有暱稱，就使用它；否則使用 Email
                         finalDisplayName = userCredential.user.displayName || email;
                         
                     } else {
@@ -162,7 +163,7 @@
                         });
                     }
                     
-                    // 修正 2: 無論是登入還是註冊，都確保 Firestore 公共 Profile 存在
+                    // 無論是登入還是註冊，都確保 Firestore 公共 Profile 存在
                     if (db) {
                         await createOrUpdatePublicProfile(db, userCredential.user.uid, finalDisplayName, email);
                     }
@@ -267,6 +268,7 @@
             const [newId, setNewId] = useState('');
             const [isEditing, setIsEditing] = useState(false);
             const [error, setError] = useState(null);
+            const [copyMessage, setCopyMessage] = useState('');
 
             const handleSwitch = () => {
                 setError(null);
@@ -288,6 +290,33 @@
                     setCurrentCollectionId(userId);
                 }
             };
+
+            // 新增: 複製分享連結功能
+            const handleCopyLink = () => {
+                if (!userId) return;
+
+                // 構建帶有當前紀錄簿 ID 的 URL 參數
+                const baseUrl = window.location.origin + window.location.pathname;
+                const shareUrl = `${baseUrl}?shareId=${currentCollectionId}`;
+                
+                // 使用 document.execCommand('copy') 來保證在 iFrame 環境中也能複製
+                const tempInput = document.createElement('textarea');
+                tempInput.value = shareUrl;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                
+                try {
+                    document.execCommand('copy');
+                    setCopyMessage('✨ 連結已複製！請分享此連結給協作者。');
+                } catch (err) {
+                    console.error('無法複製連結', err);
+                    setCopyMessage('複製失敗，請手動複製網址。');
+                }
+                
+                document.body.removeChild(tempInput);
+                
+                setTimeout(() => setCopyMessage(''), 4000);
+            };
             
             const isViewingOwn = currentCollectionId === userId;
             
@@ -304,6 +333,7 @@
             
             return (
                 <div className="p-4 bg-primaryColor-50 rounded-xl shadow-inner border border-primaryColor-200 mt-4">
+                    {copyMessage && <p className={`mb-3 p-2 text-sm rounded-lg text-green-700 bg-green-100 transition-opacity duration-500`}>{copyMessage}</p>}
                     <div className="flex justify-between items-start mb-2">
                         <div>
                             <p className="text-sm font-semibold text-gray-700">當前紀錄簿擁有者:</p>
@@ -327,12 +357,22 @@
                         </button>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-primaryColor-100">
+                    <div className="mt-3 pt-3 border-t border-primaryColor-100 space-y-3">
                         <h4 className="font-semibold text-sm text-gray-700 mb-2">共享設定與切換</h4>
+                        
+                        {/* 新增: 分享連結按鈕 */}
+                        <button 
+                            onClick={handleCopyLink}
+                            className={`w-full flex items-center justify-center py-2 px-4 border border-primaryColor-600 text-sm font-bold rounded-lg text-white bg-primaryColor-500 hover:bg-primaryColor-600 transition hover:scale-[1.01] transform`}
+                            title="生成並複製可分享的連結"
+                        >
+                            <Share2 className="w-5 h-5 mr-2" />
+                            生成並複製分享連結
+                        </button>
+
                         <p className="text-xs text-gray-500 mb-3">
                             您的專屬 ID (UID) 是: 
                             <span className="font-mono text-xs bg-gray-200 p-1 rounded break-all ml-1">{userId}</span>
-                            （將此 ID 分享給他人，讓他們檢視您的紀錄簿）
                         </p>
                         
                         {isEditing ? (
@@ -873,8 +913,20 @@
               const unsubscribe = _auth.onAuthStateChanged((user) => {
                 if (user) {
                     setUserId(user.uid);
-                    // 首次登入或狀態確認後，將 collectionId 設為自己的 UID
-                    setCurrentCollectionId(prev => prev || user.uid); 
+                    
+                    // 修正 6: 檢查 URL 參數以處理分享連結
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const shareId = urlParams.get('shareId');
+
+                    if (shareId && shareId.length === 28) {
+                        setCurrentCollectionId(shareId);
+                        // 移除 URL 參數，避免切換紀錄簿時的衝突
+                        history.replaceState(null, null, window.location.pathname);
+                    } else {
+                        // 首次登入或狀態確認後，將 collectionId 設為自己的 UID
+                        setCurrentCollectionId(prev => prev || user.uid); 
+                    }
+                    
                 } else {
                     setUserId(null);
                     setCurrentCollectionId(null);
