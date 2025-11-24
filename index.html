@@ -756,7 +756,8 @@
                               <h4 className="font-semibold text-lg mb-3 flex items-center text-primaryColor-700">
                                   <UserPlus className="w-5 h-5 mr-2" /> 新增成員
                               </h4>
-                              <div className="flex space-x-2">
+                              {/* 修正 1: 新增成員按鈕佈局修正 */}
+                              <div className="flex gap-2 items-center"> 
                                   <input
                                       key="new-member-name" 
                                       type="text"
@@ -769,7 +770,7 @@
                                   />
                                   <button
                                       onClick={handleAddMemberInternal} 
-                                      className={`px-4 py-2 rounded-lg text-white font-semibold transition hover:scale-105 transform ${
+                                      className={`flex-shrink-0 px-4 py-3 rounded-lg text-white font-semibold transition hover:scale-105 transform ${ // 移除 w-20
                                           newMemberName.trim() === '' || isLoading || isReadOnly
                                           ? 'bg-gray-400 cursor-not-allowed'
                                           : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700`
@@ -794,7 +795,7 @@
                                           <span className={`font-medium ${member === currentUserId ? 'text-primaryColor-700' : 'text-gray-800'} truncate`} title={member}>
                                               {getDisplayName(member)}
                                           </span>
-                                          <div className="flex items-center space-x-3">
+                                          <div className="flex items-center space-x-3 flex-shrink-0">
                                             
                                             <button
                                                 onClick={() => handleTempShareChange(member, -1)}
@@ -1542,7 +1543,7 @@
               <div className="mt-8 p-6 bg-white rounded-xl shadow-2xl">
                 <h2 className="text-2xl font-bold mb-4 text-gray-800 flex items-center">
                   <Users className="w-7 h-7 mr-3 text-primaryColor-500" />
-                  結餘總結 (清算方案)
+                  結餘總結
                 </h2>
 
                 {settlements.length === 0 ? (
@@ -1572,7 +1573,7 @@
                 )}
                 
                 <div className="mt-6 pt-6 border-t border-gray-100">
-                    <h3 className="text-xl font-semibold mb-3 text-gray-700">個人總結餘 (參考)</h3>
+                    <h3 className="text-xl font-semibold mb-3 text-gray-700">個人總結餘</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {members.map(member => {
                             const balance = balances[member] || 0;
@@ -1595,7 +1596,7 @@
                             );
                         })}
                     </div>
-                    <p className="mt-3 text-xs text-gray-500">正數 (應收): 別人欠你；負數 (應付): 你欠別人。(顯示金額已四捨五入)</p>
+                    <p className="mt-3 text-xs text-gray-500">正數 : 應收；負數 : 應付。(顯示金額已四捨五入)</p>
                 </div>
               </div>
             );
