@@ -101,52 +101,58 @@
         const CURRENCIES = Object.keys(DEFAULT_EXCHANGE_RATES);
         const DEFAULT_CURRENCY = 'TWD';
 
-        // --- 匯率獲取函式 (使用 Google Search Tool) ---
+        // --- 匯率獲取函式 (修正: 使用 Frankfurter API) ---
         const fetchExchangeRates = async () => {
             const liveRates = { [DEFAULT_CURRENCY]: 1.0 };
+            const API_URL = "https://api.frankfurter.app/latest?from=EUR"; // 使用 EUR 為 Base，獲取最新的匯率
+
+            console.log("Fetching live exchange rates from Frankfurter API...");
             
-            for (const currency of CURRENCIES) {
-                if (currency === DEFAULT_CURRENCY) continue;
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
                 
-                // 修正：針對越南盾和印尼盾使用換算 TWD/1000 單位，以獲得更穩定的結果
-                const baseCurrency = (currency === 'VND' || currency === 'IDR') ? `${currency} to TWD for 1000 units` : `${currency} to ${DEFAULT_CURRENCY} rate`;
-                const query = baseCurrency;
-                console.log(`Fetching live rate for: ${query}`);
-                
-                try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: query }] }],
-                            tools: [{ "google_search": {} }],
-                            systemInstruction: { parts: [{ text: "Extract only the numerical exchange rate value and return it as a plain floating point number. If you find a range, use the average. If the rate is not found, return 0. (Example: '30.5')" }] },
-                        })
-                    });
+                if (data.rates) {
+                    const ratesFromEUR = data.rates;
                     
-                    const result = await response.json();
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    let rate = parseFloat(text);
-                    
-                    // 特殊處理：VND 和 IDR 需要除以 1000
-                    if ((currency === 'VND' || currency === 'IDR') && !isNaN(rate) && rate > 0) {
-                         rate = rate / 1000;
+                    // 步驟 1: 獲取 TWD 相對於 EUR 的匯率 (1 EUR = X TWD)
+                    const eurToTwdRate = ratesFromEUR['TWD']; 
+
+                    if (!eurToTwdRate || eurToTwdRate === 0) {
+                        console.warn("❌ Failed to get EUR to TWD rate. Using default exchange rates.");
+                        return DEFAULT_EXCHANGE_RATES;
                     }
                     
-                    if (!isNaN(rate) && rate > 0) {
-                        liveRates[currency] = rate;
-                        console.log(`✅ Fetched ${currency} rate: ${rate}`);
-                    } else {
-                         // 確保在失敗時使用預設值
-                        liveRates[currency] = DEFAULT_EXCHANGE_RATES[currency];
-                        console.warn(`❌ Failed to fetch ${currency} rate, using default: ${DEFAULT_EXCHANGE_RATES[currency]}`);
+                    // 步驟 2: 計算所有 CURRENCY 相對於 TWD 的匯率 (1 CURRENCY = ? TWD)
+                    
+                    // TWD 是基準貨幣
+                    liveRates['TWD'] = 1.0; 
+
+                    for (const currency of CURRENCIES) {
+                        if (currency === DEFAULT_CURRENCY) continue;
+                        
+                        const rateFromEUR = ratesFromEUR[currency];
+                        
+                        if (rateFromEUR && rateFromEUR > 0) {
+                            // 邏輯: 1 EUR = ratesFromEUR[currency] Currency
+                            //       1 EUR = ratesFromEUR[TWD] TWD
+                            // 則 1 CURRENCY = (ratesFromEUR[TWD] / ratesFromEUR[currency]) TWD
+                            
+                            const twdRate = eurToTwdRate / rateFromEUR;
+
+                            liveRates[currency] = twdRate;
+                            console.log(`✅ Fetched ${currency} rate: ${twdRate.toFixed(4)} TWD`);
+                        } else {
+                            // 如果 API 沒返回某個幣別的匯率，則使用備用值
+                            liveRates[currency] = DEFAULT_EXCHANGE_RATES[currency];
+                        }
                     }
-                } catch (e) {
-                    console.error(`Fetch API failed for ${currency}:`, e);
-                    liveRates[currency] = DEFAULT_EXCHANGE_RATES[currency];
+                    return liveRates;
                 }
+            } catch (e) {
+                console.error(`Fetch ExchangeRate API failed, using defaults:`, e);
             }
-            return liveRates;
+            return DEFAULT_EXCHANGE_RATES;
         };
 
 
@@ -727,7 +733,7 @@
                            <p className="mt-1 text-xs text-gray-500 italic">
                                換算台幣 (TWD) 約: 
                                <span className="font-semibold text-primaryColor-600 ml-1">TWD {amountInTWD.toFixed(0)}</span>
-                               (匯率: {currentExchangeRate})
+                               (匯率: {currentExchangeRate.toFixed(4)})
                            </p>
                         )}
                         {newExpense.originalAmount > 0 && newExpense.currency === DEFAULT_CURRENCY && (
@@ -1012,12 +1018,8 @@
                                   : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700 hover:shadow-lg`
                               }`}
                           >
-                              {isLoading ? '儲存中...' : (
-                                  <>
-                                      <CircleCheck className="w-5 h-5 mr-2" />
-                                      儲存預設份數
-                                  </>
-                              )}
+                              <CircleCheck className="w-5 h-5 mr-2" />
+                              儲存預設份數
                           </button>
                       </div>
                   </div>
@@ -1121,7 +1123,7 @@
             if (!authReady || !db) return;
             
             // 修正 4: 監聽公共用戶檔案集合 (3 段路徑)
-            // 新路徑: artifacts/{appId}/public_profiles
+            // 新路徑: artifacts/${appId}/public_profiles
             const profilesCollectionPath = `artifacts/${appId}/public_profiles`;
             const profilesRef = db.collection(profilesCollectionPath);
 
@@ -1612,7 +1614,7 @@
             return settlements;
           }, [calculateBalances]); 
 
-          // --- 11. UI 輔助元件 ---
+          // --- 10. UI 輔助元件 ---
 
           // 獲取顯示名稱（使用公共暱稱/Auth Profile/UID）
           const getDisplayName = useCallback((memberId) => {
@@ -1689,7 +1691,7 @@
                 {error && (
                     <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
                         <p className="font-semibold">錯誤提示:</p>
-                        <p className="text-sm">{error}</p>
+                        <p className="sm">{error}</p>
                     </div>
                 )}
 
@@ -1917,9 +1919,6 @@
                         <p className="text-base text-gray-600 mb-4">結清帳目所需的轉帳清單（四捨五入）：</p>
                         {settlements.map((settlement, index) => {
                             // 判斷按鈕類型
-                            const isUserDebtor = settlement.from === currentCollectionId; // 我是付款人 (應付)
-                            const isUserCreditor = settlement.to === currentCollectionId; // 我是收款人 (應收)
-                            
                             // 修正: 紀錄簿擁有者可以代為確認所有轉帳
                             const canSettle = !isReadOnly; 
 
