@@ -61,6 +61,9 @@
             measurementId: "G-XCB90NSB43"
         });
         const __initial_auth_token = null; // 不再使用匿名登入
+
+        // 新增：請將您的 Gemini API Key 填入此處
+        const GEMINI_API_KEY = ""; 
     </script>
 
     <!-- 
@@ -76,11 +79,12 @@
 
         const { useState, useEffect, useCallback, useMemo } = React;
         
-        // 修正：將全域變數引入 Babel 作用域
+        // 修正：將全域變數引入 Babel 作用域 (移除 GEMINI_API_KEY 的 const 宣告)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? initialAuthToken : null;
-
+        
+        // 注意：GEMINI_API_KEY 已在頂層的純 JS 區塊中定義，可以直接訪問
         const { firestore } = firebase;
         const serverTimestamp = firestore.FieldValue.serverTimestamp; 
         
@@ -101,59 +105,56 @@
         const CURRENCIES = Object.keys(DEFAULT_EXCHANGE_RATES);
         const DEFAULT_CURRENCY = 'TWD';
 
-        // --- 匯率獲取函式 (修正: 使用 Frankfurter API) ---
+        // --- 匯率獲取函式 (使用 Google Search Tool) ---
         const fetchExchangeRates = async () => {
-            const liveRates = { [DEFAULT_CURRENCY]: 1.0 };
-            const API_URL = "https://api.frankfurter.app/latest?from=EUR"; // 使用 EUR 為 Base，獲取最新的匯率
+			// 這裡改成使用免費匯率 API（無需金鑰），以 TWD 為基準
+			// 範例使用 open.er-api.com（免費、支援 CORS）
+			const API_URL = 'https://open.er-api.com/v6/latest/TWD';
 
-            console.log("Fetching live exchange rates from Frankfurter API...");
-            
-            try {
-                const response = await fetch(API_URL);
-                const data = await response.json();
-                
-                if (data.rates) {
-                    const ratesFromEUR = data.rates;
-                    
-                    // 步驟 1: 獲取 TWD 相對於 EUR 的匯率 (1 EUR = X TWD)
-                    const eurToTwdRate = ratesFromEUR['TWD']; 
+			try {
+				const response = await fetch(API_URL);
+				if (!response.ok) {
+					throw new Error('Exchange rate API response not ok');
+				}
 
-                    if (!eurToTwdRate || eurToTwdRate === 0) {
-                        console.warn("❌ Failed to get EUR to TWD rate. Using default exchange rates.");
-                        return DEFAULT_EXCHANGE_RATES;
-                    }
-                    
-                    // 步驟 2: 計算所有 CURRENCY 相對於 TWD 的匯率 (1 CURRENCY = ? TWD)
-                    
-                    // TWD 是基準貨幣
-                    liveRates['TWD'] = 1.0; 
+				const data = await response.json();
+				// 正常會有：data.result === 'success' 並且 data.rates 是一個物件
+				if (!data || data.result !== 'success' || !data.rates) {
+					throw new Error('Invalid exchange rate API payload');
+				}
 
-                    for (const currency of CURRENCIES) {
-                        if (currency === DEFAULT_CURRENCY) continue;
-                        
-                        const rateFromEUR = ratesFromEUR[currency];
-                        
-                        if (rateFromEUR && rateFromEUR > 0) {
-                            // 邏輯: 1 EUR = ratesFromEUR[currency] Currency
-                            //       1 EUR = ratesFromEUR[TWD] TWD
-                            // 則 1 CURRENCY = (ratesFromEUR[TWD] / ratesFromEUR[currency]) TWD
-                            
-                            const twdRate = eurToTwdRate / rateFromEUR;
+				/**
+				 * data.base_code === 'TWD'
+				 * data.rates 代表「1 TWD 可以換多少目標貨幣」
+				 *   例如： data.rates.USD = 0.031  =>  1 TWD = 0.031 USD
+				 *
+				 * 但我們系統是需要「1 單位外幣 = 幾 TWD」，
+				 * 也就是： rateToTWD = 1 / (TWD -> 目標貨幣的匯率)
+				 */
+				const resultRates = { [DEFAULT_CURRENCY]: 1.0 };
 
-                            liveRates[currency] = twdRate;
-                            console.log(`✅ Fetched ${currency} rate: ${twdRate.toFixed(4)} TWD`);
-                        } else {
-                            // 如果 API 沒返回某個幣別的匯率，則使用備用值
-                            liveRates[currency] = DEFAULT_EXCHANGE_RATES[currency];
-                        }
-                    }
-                    return liveRates;
-                }
-            } catch (e) {
-                console.error(`Fetch ExchangeRate API failed, using defaults:`, e);
-            }
-            return DEFAULT_EXCHANGE_RATES;
-        };
+				CURRENCIES.forEach((code) => {
+					if (code === DEFAULT_CURRENCY) return;
+
+					const rateTWDToCode = data.rates[code]; // 1 TWD -> x code
+					if (typeof rateTWDToCode === 'number' && rateTWDToCode > 0) {
+						// 1 code -> ? TWD
+						const rateCodeToTWD = 1 / rateTWDToCode;
+						resultRates[code] = rateCodeToTWD;
+					} else {
+						// 如果 API 沒提供或有問題，就使用預設值備援
+						resultRates[code] = DEFAULT_EXCHANGE_RATES[code];
+					}
+				});
+
+				console.log('✅ Live exchange rates loaded:', resultRates);
+				return resultRates;
+
+			} catch (e) {
+				console.error('❌ Failed to fetch live exchange rates, fallback to defaults:', e);
+				return DEFAULT_EXCHANGE_RATES;
+			}
+		};
 
 
         const primaryColor = 'teal';
@@ -476,46 +477,8 @@
                             >
                                 <Share2 className="w-5 h-5 mr-2" />
                                 複製分享連結
-                            </button>
-                            
-                            {/* 新增: 切回自己紀錄簿按鈕 (只在共享模式下顯示) */}
-                            {!isViewingOwn && (
-                                <button onClick={handleBackToOwn} className="w-1/2 flex items-center justify-center py-2 px-4 border border-blue-500 text-sm font-bold rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition hover:scale-[1.01] transform">
-                                    <RefreshCw className="w-4 h-4 mr-1" />
-                                    切回我的紀錄簿
-                                </button>
-                            )}
+                            </button>                    
                         </div>
-
-                        <p className="text-xs text-gray-500 mb-3">
-                            您的專屬 ID (UID) 是: 
-                            <span className="font-mono text-xs bg-gray-200 p-1 rounded break-all ml-1">{userId}</span>
-                        </p>
-                        
-                        {isEditing ? (
-                            <div className="space-y-2">
-                                <input
-                                    type="text"
-                                    value={newId}
-                                    onChange={(e) => setNewId(e.target.value)}
-                                    placeholder="輸入要切換的紀錄簿 ID (28 字元)"
-                                    className="block w-full border border-gray-300 rounded-lg p-2 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                />
-                                {error && <p className="text-red-600 text-xs">{error}</p>}
-                                <div className="flex space-x-2">
-                                    <button onClick={handleSwitch} className={`flex-1 px-4 py-2 rounded-lg text-white font-semibold bg-primaryColor-600 hover:bg-primaryColor-700 transition`} disabled={!newId.trim()}>
-                                        切換紀錄簿
-                                    </button>
-                                    <button onClick={() => setIsEditing(false)} className="px-4 py-2 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300 transition">
-                                        取消
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <button onClick={() => setIsEditing(true)} className="w-full px-4 py-2 border border-primaryColor-500 text-sm font-bold rounded-lg text-primaryColor-600 bg-white hover:bg-primaryColor-50 transition">
-                                切換到其他紀錄簿 / 輸入共享 ID
-                            </button>
-                        )}
                     </div>
                 </div>
             );
@@ -733,7 +696,7 @@
                            <p className="mt-1 text-xs text-gray-500 italic">
                                換算台幣 (TWD) 約: 
                                <span className="font-semibold text-primaryColor-600 ml-1">TWD {amountInTWD.toFixed(0)}</span>
-                               (匯率: {currentExchangeRate.toFixed(4)})
+                               (匯率: {currentExchangeRate})
                            </p>
                         )}
                         {newExpense.originalAmount > 0 && newExpense.currency === DEFAULT_CURRENCY && (
@@ -1123,7 +1086,7 @@
             if (!authReady || !db) return;
             
             // 修正 4: 監聽公共用戶檔案集合 (3 段路徑)
-            // 新路徑: artifacts/${appId}/public_profiles
+            // 新路徑: artifacts/{appId}/public_profiles
             const profilesCollectionPath = `artifacts/${appId}/public_profiles`;
             const profilesRef = db.collection(profilesCollectionPath);
 
@@ -1379,7 +1342,7 @@
 
               openConfirmModal(
                   '確認清除所有支出', 
-                  '您確定要刪除此記帳簿中的所有支出記錄嗎？', 
+                  '您確定要刪除此記帳簿中的所有支出記錄嗎？（成員清單和預設份數將被保留）', 
                   onConfirm
               );
           }, [db, appId, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
@@ -1691,7 +1654,7 @@
                 {error && (
                     <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
                         <p className="font-semibold">錯誤提示:</p>
-                        <p className="sm">{error}</p>
+                        <p className="text-sm">{error}</p>
                     </div>
                 )}
 
@@ -1838,7 +1801,7 @@
                       const sharesDetail = Object.entries(exp.shares)
                         .filter(([, share]) => share > 0)
                         .map(([name, share]) => `${getDisplayName(name)} (${share}份)`)
-                        .join(', ');
+                        .join(', ')
 
                       // 修正: 顯示原始幣別和換算金額
                       const displayAmount = `${exp.currency} ${Math.round(exp.originalAmount).toFixed(0)}`;
@@ -1906,7 +1869,7 @@
               <div className="mt-8 p-6 bg-white rounded-xl shadow-2xl">
                 <h2 className="text-2xl font-bold mb-4 text-gray-800 flex items-center">
                   <Users className="w-7 h-7 mr-3 text-primaryColor-500" />
-                  結餘總結
+                  結餘總結 
                 </h2>
 
                 {settlements.length === 0 ? (
