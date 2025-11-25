@@ -60,9 +60,9 @@
             appId: "1:10696910340:web:2ccda0f7db8ef8af6f3751",
             measurementId: "G-XCB90NSB43"
         });
-        const __initial_auth_token = null; // 不再使用匿名登入
+        // 匿名登入不再使用，故不需要 __initial_auth_token
 
-        // 新增：請將您的 Gemini API Key 填入此處
+        // 新增：請將您的 Gemini API Key 填入此處（目前未使用）
         const GEMINI_API_KEY = ""; 
     </script>
 
@@ -74,21 +74,19 @@
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore-compat.js"></script>
     
     <script type="text/babel">
-        // 修正 1：明確聲明 React 為全域變數，確保 Babel 能夠找到它
+        // 明確聲明 React 為全域變數，確保 Babel 能夠找到它
         const React = window.React;
-
         const { useState, useEffect, useCallback, useMemo } = React;
         
-        // 修正：將全域變數引入 Babel 作用域 (移除 GEMINI_API_KEY 的 const 宣告)
+        // 將全域變數引入 Babel 作用域
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? initialAuthToken : null;
         
         // 注意：GEMINI_API_KEY 已在頂層的純 JS 區塊中定義，可以直接訪問
         const { firestore } = firebase;
         const serverTimestamp = firestore.FieldValue.serverTimestamp; 
         
-        // --- 匯率設定 (修正: 預設值作為備用) ---
+        // --- 匯率設定 (預設值作為備用) ---
         const DEFAULT_EXCHANGE_RATES = {
             'TWD': 1.0,   // 基準貨幣：臺幣
             'USD': 30.5,  // 美金
@@ -159,7 +157,7 @@
 
 				const now = Date.now();
 
-				// 3. 写入 Cache
+				// 3. 寫入 Cache
 				try {
 					localStorage.setItem(CACHE_KEY, JSON.stringify(processedRates));
 					localStorage.setItem(CACHE_TIME_KEY, now.toString());
@@ -185,16 +183,13 @@
 			}
 		};
 
-
-        const primaryColor = 'teal';
-        
         // --- 內聯 SVG 圖標元件 (Lucide 樣式) ---
         const IconProps = {
             stroke: "currentColor",
             strokeWidth: 2,
             strokeLinecap: "round",
             strokeLinejoin: "round",
-            fill: "none", // 確保 SVG 圖標沒有填充，只顯示線條
+            fill: "none",
         };
         
         const CircleDollarSign = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v1M12 17v1M16 8h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2z"></path></svg>;
@@ -203,7 +198,6 @@
         const Minus = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M5 12h14"></path></svg>;
         const Users = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
         const X = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>;
-        // 修正 2: Check 替換為 CircleCheck 的 SVG (圓圈勾)
         const CircleCheck = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14 9 11"></polyline></svg>;
         const Pencil = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>;
         const UserPlus = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="16" x2="22" y1="11" y2="11"></line></svg>;
@@ -236,6 +230,11 @@
         const ConfirmationModal = React.memo(({ isOpen, onClose, onConfirm, title, message, confirmText, confirmColor = 'red' }) => {
             if (!isOpen) return null;
 
+            const colorClass =
+                confirmColor === 'green'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-red-600 hover:bg-red-700';
+
             return (
                 <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[9999] transition-opacity">
                     <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl transform transition-transform duration-300 scale-100">
@@ -251,7 +250,7 @@
                                 </button>
                                 <button
                                     onClick={onConfirm}
-                                    className={`px-4 py-2 rounded-full text-white font-semibold transition duration-150 shadow-md bg-${confirmColor}-600 hover:bg-${confirmColor}-700`}
+                                    className={`px-4 py-2 rounded-full text-white font-semibold transition duration-150 shadow-md ${colorClass}`}
                                 >
                                     {confirmText}
                                 </button>
@@ -262,14 +261,13 @@
             );
         });
 
-
         /**
          * 認證模態視窗
          */
         const AuthModal = React.memo(({ auth, db }) => {
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
-            const [nickname, setNickname] = useState(''); // 新增暱稱狀態
+            const [nickname, setNickname] = useState('');
             const [isLogin, setIsLogin] = useState(true);
             const [error, setError] = useState(null);
             const [isLoading, setIsLoading] = useState(false);
@@ -291,20 +289,14 @@
 
                     if (isLogin) {
                         userCredential = await auth.signInWithEmailAndPassword(email, password);
-                        
-                        // 登入後，如果 Auth Profile 有暱稱，就使用它；否則使用 Email
                         finalDisplayName = userCredential.user.displayName || email;
-                        
                     } else {
                         userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                        
-                        // 註冊成功後更新 displayName (Auth Profile)
                         await userCredential.user.updateProfile({
                             displayName: finalDisplayName
                         });
                     }
                     
-                    // 無論是登入還是註冊，都確保 Firestore 公共 Profile 存在
                     if (db) {
                         await createOrUpdatePublicProfile(db, userCredential.user.uid, finalDisplayName, email);
                     }
@@ -330,13 +322,12 @@
             return (
                 <div className="fixed inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 sm:p-8">
-                        <h3 className={`text-3xl font-bold text-${primaryColor}-600 text-center mb-6`}>
+                        <h3 className="text-3xl font-bold text-primaryColor-600 text-center mb-6">
                             {isLogin ? '登入紀錄簿' : '註冊新帳號'}
                         </h3>
                         {error && <p className="text-red-600 bg-red-100 p-3 rounded-lg text-sm mb-4">{error}</p>}
 
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            {/* 註冊時顯示暱稱輸入框 */}
                             {!isLogin && (
                                 <div>
                                     <label htmlFor="nickname" className="block text-sm font-medium text-gray-700">暱稱 (顯示名稱)</label>
@@ -381,9 +372,10 @@
                             <button
                                 type="submit"
                                 disabled={isLoading}
-                                className={`w-full flex items-center justify-center px-4 py-3 rounded-full text-white font-semibold transition duration-300 shadow-lg ${
-                                    isLoading ? 'bg-gray-400 cursor-not-allowed' : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700`
-                                }`}
+                                className={
+                                    "w-full flex items-center justify-center px-4 py-3 rounded-full text-white font-semibold transition duration-300 shadow-lg " +
+                                    (isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-primaryColor-600 hover:bg-primaryColor-700")
+                                }
                             >
                                 {isLoading ? '處理中...' : (isLogin ? '登入' : '註冊')}
                             </button>
@@ -391,8 +383,8 @@
 
                         <div className="mt-6 text-center">
                             <button
-                                onClick={() => { setIsLogin(prev => !prev); setError(null); setNickname(''); }} // 清除暱稱狀態
-                                className={`text-${primaryColor}-600 hover:text-${primaryColor}-800 font-medium text-sm`}
+                                onClick={() => { setIsLogin(prev => !prev); setError(null); setNickname(''); }}
+                                className="text-primaryColor-600 hover:text-primaryColor-800 font-medium text-sm"
                             >
                                 {isLogin ? '還沒有帳號？點此註冊' : '已經有帳號了？點此登入'}
                             </button>
@@ -403,46 +395,18 @@
         });
         
         /**
-         * 紀錄簿共享與切換元件
+         * 紀錄簿共享與切換元件（已移除手動輸入 UID 切換功能）
          */
-        const CollectionSwitch = React.memo(({ userId, currentCollectionId, setCurrentCollectionId, getDisplayName, logout, userProfiles }) => {
-            const [newId, setNewId] = useState('');
-            const [isEditing, setIsEditing] = useState(false);
-            const [error, setError] = useState(null);
+        const CollectionSwitch = React.memo(({ userId, currentCollectionId, getDisplayName, logout, userProfiles }) => {
             const [copyMessage, setCopyMessage] = useState('');
 
-            const handleSwitch = () => {
-                setError(null);
-                const trimmedId = newId.trim();
-                // 檢查 UID 格式是否為 28 個字元長度 (Firebase 標準 UID 長度)
-                if (trimmedId && trimmedId !== currentCollectionId && trimmedId.length === 28) {
-                    setCurrentCollectionId(trimmedId);
-                    setIsEditing(false);
-                    setNewId('');
-                } else if (trimmedId === currentCollectionId) {
-                    setError("您已經在查看此紀錄簿了。");
-                } else {
-                    setError("輸入的 ID 格式無效或長度不符 (需為 28 字元的 UID)。");
-                }
-            };
-            
-            const handleBackToOwn = () => {
-                if (userId && currentCollectionId !== userId) {
-                    setCurrentCollectionId(userId);
-                    setCopyMessage('已切換回您的私有紀錄簿。');
-                    setTimeout(() => setCopyMessage(''), 4000);
-                }
-            };
-
-            // 新增: 複製分享連結功能
+            // 複製分享連結
             const handleCopyLink = () => {
                 if (!userId) return;
 
-                // 構建帶有當前紀錄簿 ID 的 URL 參數
                 const baseUrl = window.location.origin + window.location.pathname;
                 const shareUrl = `${baseUrl}?shareId=${currentCollectionId}`;
                 
-                // 使用 document.execCommand('copy') 來保證在 iFrame 環境中也能複製
                 const tempInput = document.createElement('textarea');
                 tempInput.value = shareUrl;
                 document.body.appendChild(tempInput);
@@ -457,32 +421,32 @@
                 }
                 
                 document.body.removeChild(tempInput);
-                
                 setTimeout(() => setCopyMessage(''), 4000);
             };
             
             const isViewingOwn = currentCollectionId === userId;
             
-            // 修正 5: 顯示名稱邏輯簡化
             let collectionDisplay = currentCollectionId;
             if (userProfiles[currentCollectionId]) {
                 collectionDisplay = userProfiles[currentCollectionId];
             } else if (currentCollectionId === userId) {
                 collectionDisplay = getDisplayName(userId);
-            } else {
-                // 如果是其他人的，但找不到暱稱，則顯示 UID 的簡短形式
+            } else if (currentCollectionId) {
                 collectionDisplay = `${currentCollectionId.substring(0, 5)}...${currentCollectionId.substring(currentCollectionId.length - 5)}`;
             }
             
             return (
                 <div className="p-4 bg-primaryColor-50 rounded-xl shadow-inner border border-primaryColor-200 mt-4">
-                    {copyMessage && <p className={`mb-3 p-2 text-sm rounded-lg text-green-700 bg-green-100 transition-opacity duration-500`}>{copyMessage}</p>}
+                    {copyMessage && (
+                        <p className="mb-3 p-2 text-sm rounded-lg text-green-700 bg-green-100 transition-opacity duration-500">
+                            {copyMessage}
+                        </p>
+                    )}
                     <div className="flex justify-between items-start mb-2">
                         <div>
                             <p className="text-sm font-semibold text-gray-700">當前紀錄簿擁有者:</p>
-                            <p className="font-extrabold text-lg text-primaryColor-700 truncate" title={currentCollectionId}>
-                                {/* 修正：顯示暱稱/簡短ID，如果是共享模式，加上 (共享中) 標記 */}
-                                {collectionDisplay} {!isViewingOwn && <span className="text-sm font-normal">(共享中)</span>}
+                            <p className="font-extrabold text-lg text-primaryColor-700 truncate" title={currentCollectionId || ''}>
+                                {collectionDisplay || '（無）'} {!isViewingOwn && collectionDisplay && <span className="text-sm font-normal">(共享中)</span>}
                             </p>
                         </div>
                         <button 
@@ -496,10 +460,9 @@
 
                     <div className="mt-3 pt-3 border-t border-primaryColor-100 space-y-3">
                         <div className="flex space-x-2">
-                            {/* 新增: 分享連結按鈕 */}
                             <button 
                                 onClick={handleCopyLink}
-                                className={`flex-1 flex items-center justify-center py-2 px-4 border border-primaryColor-600 text-sm font-bold rounded-lg text-white bg-primaryColor-500 hover:bg-primaryColor-600 transition hover:scale-[1.01] transform`}
+                                className="flex-1 flex items-center justify-center py-2 px-4 border border-primaryColor-600 text-sm font-bold rounded-lg text-white bg-primaryColor-500 hover:bg-primaryColor-600 transition hover:scale-[1.01] transform"
                                 title="生成並複製可分享的連結"
                             >
                                 <Share2 className="w-5 h-5 mr-2" />
@@ -517,8 +480,8 @@
         const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates }) => {
             const [newExpense, setNewExpense] = useState({
                 description: '',
-                originalAmount: '', // 修正: 原始金額
-                currency: DEFAULT_CURRENCY, // 修正: 新增幣別
+                originalAmount: '',
+                currency: DEFAULT_CURRENCY,
                 payerName: currentUserId || '',
                 shares: {}, 
             });
@@ -530,8 +493,6 @@
             const modalTitle = isEditing ? '編輯支出記錄' : '新增支出記錄';
             const submitText = isEditing ? '儲存修改' : '確認新增支出';
             
-            // 計算換算後的臺幣金額
-            // 修正: 優先使用 liveExchangeRates，如果不存在則使用預設值
             const currentExchangeRate = liveExchangeRates[newExpense.currency] || DEFAULT_EXCHANGE_RATES[newExpense.currency] || 1.0;
             const amountInTWD = useMemo(() => {
                 const amount = parseFloat(newExpense.originalAmount) || 0;
@@ -548,16 +509,16 @@
                         }), {});
                         setNewExpense({
                             description: expenseToEdit.description,
-                            originalAmount: expenseToEdit.originalAmount, // 修正: 使用原始金額
-                            currency: expenseToEdit.currency || DEFAULT_CURRENCY, // 修正: 使用儲存的幣別
+                            originalAmount: expenseToEdit.originalAmount,
+                            currency: expenseToEdit.currency || DEFAULT_CURRENCY,
                             payerName: expenseToEdit.payerName,
                             shares: initialShares,
                         });
                     } else {
                         setNewExpense({
                             description: '',
-                            originalAmount: '', // 修正: 原始金額
-                            currency: DEFAULT_CURRENCY, // 修正: 預設幣別
+                            originalAmount: '',
+                            currency: DEFAULT_CURRENCY,
                             payerName: currentUserId || members[0] || '',
                             shares: getInitialShares(),
                         });
@@ -570,7 +531,7 @@
                 const { name, value } = e.target;
                 setNewExpense(prev => ({
                     ...prev,
-                    [name]: name === 'originalAmount' ? parseFloat(value) || '' : value, // 修正: 監聽原始金額
+                    [name]: name === 'originalAmount' ? (value === '' ? '' : parseFloat(value) || '') : value,
                 }));
             };
 
@@ -578,7 +539,7 @@
                  setNewExpense(prev => ({
                     ...prev,
                     currency: e.target.value,
-                }));
+                 }));
             };
 
             const handleShareChange = (name, delta) => {
@@ -620,22 +581,20 @@
                 try {
                     const expenseToSave = {
                         description: newExpense.description,
-                        originalAmount: newExpense.originalAmount, // 修正: 原始金額
-                        currency: newExpense.currency, // 修正: 原始幣別
-                        exchangeRate: currentExchangeRate, // 修正: 儲存匯率
-                        amountInTWD: amountInTWD, // 修正: 儲存臺幣換算後的金額 (用於計算)
+                        originalAmount: newExpense.originalAmount,
+                        currency: newExpense.currency,
+                        exchangeRate: currentExchangeRate,
+                        amountInTWD: amountInTWD,
                         payerName: newExpense.payerName,
                         shares: Object.entries(newExpense.shares).reduce((acc, [name, share]) => {
                             if (share > 0) acc[name] = share;
                             return acc;
                         }, {}),
-                        // 修正：將 creatorId 設定為當前登入的 userId，即使是在編輯模式下也保留
                         ...(isEditing ? {} : { timestamp: serverTimestamp(), creatorId: currentUserId }),
                         appId: appId,
                     };
 
-                    // 修正: 資料路徑使用 collectionId
-                    const collectionPath = `artifacts/${appId}/users/${collectionId}/expenses`; // <-- 修正路徑
+                    const collectionPath = `artifacts/${appId}/users/${collectionId}/expenses`;
                     
                     if (isEditing) {
                         const docPath = `${collectionPath}/${expenseToEdit.id}`;
@@ -655,15 +614,16 @@
             
             if (!state.isOpen) return null;
 
-
             return (
               <div 
-                key={isEditing ? expenseToEdit.id : 'add-new'} 
+                key={isEditing && expenseToEdit ? expenseToEdit.id : 'add-new'} 
                 className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50 transition-opacity"
               >
                 <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl transform transition-transform duration-300 scale-100">
                   <div className="p-6 border-b flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-gray-800">{modalTitle} {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}</h3>
+                    <h3 className="text-xl font-bold text-gray-800">
+                        {modalTitle} {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
+                    </h3>
                     <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 text-gray-600 transition hover:scale-110 transform">
                       <X className="w-6 h-6" />
                     </button>
@@ -777,7 +737,6 @@
                               <span className={`font-medium ${isPayer ? 'text-primaryColor-700' : 'text-gray-700'}`}>
                                 {displayMember} {isPayer && '(付款人)'}
                               </span>
-                              {/* 修正：增加 flex-shrink-0 確保按鈕不會在 Safari 上被擠壓或隱藏 */}
                               <div className="flex items-center space-x-2 flex-shrink-0">
                                 <button
                                   onClick={() => handleShareChange(member, -1)}
@@ -811,11 +770,12 @@
                     <button
                       onClick={saveExpense}
                       disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName}
-                      className={`flex items-center px-6 py-3 rounded-full text-white font-semibold transition duration-150 shadow-md ${
-                        (isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName)
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700 hover:shadow-lg`
-                      }`}
+                      className={
+                        "flex items-center px-6 py-3 rounded-full text-white font-semibold transition duration-150 shadow-md " +
+                        ((isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName)
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-primaryColor-600 hover:bg-primaryColor-700 hover:shadow-lg")
+                      }
                     >
                       {isLoadingModal ? '儲存中...' : (
                         <>
@@ -828,12 +788,13 @@
                 </div>
               </div>
             );
-          });
+        });
           
-          /**
-           * 成員管理 Modal (核心邏輯獨立)
-           */
-          const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly, collectionId }) => {
+        /**
+         * 成員管理 Modal (核心邏輯獨立)
+         * 已移除未使用的 collectionId 參數
+         */
+        const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly }) => {
             const [newMemberName, setNewMemberName] = useState(''); 
             const [tempDefaultShares, setTempDefaultShares] = useState({});
 
@@ -854,7 +815,6 @@
                 
                 const trimmedName = newMemberName.trim();
                 if (trimmedName && trimmedName !== currentUserId && !customMembers.includes(trimmedName)) {
-                    // 修正: 呼叫 saveMembers 時，只傳遞 customMembers (不包含 currentUserId)
                     const newMemberList = [...customMembers, trimmedName];
                     await saveMembers(newMemberList); 
                     setNewMemberName('');
@@ -889,15 +849,15 @@
                 await handleDeleteMember(member);
             };
 
-            
             if (!isMemberModalOpen) return null;
 
-
             return (
-              <div className={`fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50 transition-opacity`}>
+              <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50 transition-opacity">
                   <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100">
                       <div className="p-6 border-b flex justify-between items-center">
-                          <h3 className="text-xl font-bold text-gray-800">管理分帳成員與預設份數 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}</h3>
+                          <h3 className="text-xl font-bold text-gray-800">
+                            管理分帳成員與預設份數 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
+                          </h3>
                           <button onClick={() => setIsMemberModalOpen(false)} className="p-1 rounded-full hover:bg-gray-100 text-gray-600 transition hover:scale-110 transform">
                               <X className="w-6 h-6" />
                           </button>
@@ -909,7 +869,6 @@
                               <h4 className="font-semibold text-lg mb-3 flex items-center text-primaryColor-700">
                                   <UserPlus className="w-5 h-5 mr-2" /> 新增成員
                               </h4>
-                              {/* 修正 1: 新增成員按鈕佈局修正 */}
                               <div className="flex gap-2 items-center"> 
                                   <input
                                       key="new-member-name" 
@@ -923,11 +882,12 @@
                                   />
                                   <button
                                       onClick={handleAddMemberInternal} 
-                                      className={`flex-shrink-0 px-4 py-3 rounded-lg text-white font-semibold transition hover:scale-105 transform ${ // 移除 w-20
-                                          newMemberName.trim() === '' || isLoading || isReadOnly
-                                          ? 'bg-gray-400 cursor-not-allowed'
-                                          : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700`
-                                      }`}
+                                      className={
+                                        "flex-shrink-0 px-4 py-3 rounded-lg text-white font-semibold transition hover:scale-105 transform " +
+                                        (newMemberName.trim() === '' || isLoading || isReadOnly
+                                          ? "bg-gray-400 cursor-not-allowed"
+                                          : "bg-primaryColor-600 hover:bg-primaryColor-700")
+                                      }
                                       disabled={newMemberName.trim() === '' || isLoading || isReadOnly}
                                   >
                                       新增
@@ -1002,11 +962,12 @@
                           <button
                               onClick={() => handleSaveDefaultShares(tempDefaultShares)}
                               disabled={isLoading || isReadOnly}
-                              className={`flex items-center px-6 py-3 rounded-full text-white font-semibold transition hover:scale-105 transform duration-150 shadow-md ${
-                                  isLoading || isReadOnly
-                                  ? 'bg-gray-400 cursor-not-allowed'
-                                  : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700 hover:shadow-lg`
-                              }`}
+                              className={
+                                "flex items-center px-6 py-3 rounded-full text-white font-semibold transition hover:scale-105 transform duration-150 shadow-md " +
+                                ((isLoading || isReadOnly)
+                                  ? "bg-gray-400 cursor-not-allowed"
+                                  : "bg-primaryColor-600 hover:bg-primaryColor-700 hover:shadow-lg")
+                              }
                           >
                               <CircleCheck className="w-5 h-5 mr-2" />
                               儲存預設份數
@@ -1015,8 +976,7 @@
                   </div>
               </div>
             );
-          });
-
+        });
 
         /**
          * 主要的 App 元件
@@ -1025,15 +985,14 @@
           // --- 應用程式狀態 ---
           const [db, setDb] = useState(null);
           const [auth, setAuth] = useState(null);
-          const [userId, setUserId] = useState(null); // 當前登入的使用者 ID
+          const [userId, setUserId] = useState(null);
           const [authReady, setAuthReady] = useState(false);
           const [userProfiles, setUserProfiles] = useState({});
 		  const [lastExchangeUpdate, setLastExchangeUpdate] = useState(null);
-          // 新增狀態：用於儲存實時匯率
           const [liveExchangeRates, setLiveExchangeRates] = useState(DEFAULT_EXCHANGE_RATES);
           
           const [currentCollectionId, setCurrentCollectionId] = useState(null); // 當前正在檢視的紀錄簿 ID (預設為 userId)
-          const isReadOnly = userId !== currentCollectionId; // 判斷是否為唯讀模式
+          const isReadOnly = userId !== currentCollectionId;
 
           const [expenses, setExpenses] = useState([]);
           const [customMembers, setCustomMembers] = useState([]); 
@@ -1046,7 +1005,6 @@
               isEditing: false,
           });
           
-          // 新增：Confirmation Modal 狀態
           const [confirmModalState, setConfirmModalState] = useState({
               isOpen: false,
               title: '',
@@ -1057,7 +1015,6 @@
           });
 
           const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
-          
           const [isLoading, setIsLoading] = useState(false);
           const [error, setError] = useState(null);
           
@@ -1077,21 +1034,17 @@
               setDb(_db);
               setAuth(_auth);
 
-              // 監聽 Auth 狀態變化
               const unsubscribe = _auth.onAuthStateChanged((user) => {
                 if (user) {
                     setUserId(user.uid);
                     
-                    // 修正 6: 檢查 URL 參數以處理分享連結
                     const urlParams = new URLSearchParams(window.location.search);
                     const shareId = urlParams.get('shareId');
 
-                    if (shareId && shareId.length === 28) {
+                    if (shareId) {
                         setCurrentCollectionId(shareId);
-                        // 移除 URL 參數，避免切換紀錄簿時的衝突
                         history.replaceState(null, null, window.location.pathname);
                     } else {
-                        // 首次登入或狀態確認後，將 collectionId 設為自己的 UID
                         setCurrentCollectionId(prev => prev || user.uid); 
                     }
                     
@@ -1109,12 +1062,10 @@
             }
           }, []);
 
-          // --- 2. 獲取所有公共暱稱 (Public User Profiles) ---
+          // --- 2. 獲取所有公共暱稱 ---
           useEffect(() => {
             if (!authReady || !db) return;
             
-            // 修正 4: 監聽公共用戶檔案集合 (3 段路徑)
-            // 新路徑: artifacts/{appId}/public_profiles
             const profilesCollectionPath = `artifacts/${appId}/public_profiles`;
             const profilesRef = db.collection(profilesCollectionPath);
 
@@ -1122,7 +1073,6 @@
                 const profiles = {};
                 snapshot.forEach(docSnap => {
                     const data = docSnap.data();
-                    // 確保我們只儲存 UID 和 displayName
                     if (data.uid && data.displayName) {
                         profiles[data.uid] = data.displayName;
                     }
@@ -1130,7 +1080,6 @@
                 setUserProfiles(profiles);
             }, (err) => {
                 console.error("Error listening to user profiles:", err);
-                // 忽略權限錯誤，因為如果規則只允許讀取，資料可能已經被讀取
             });
 
             return () => unsubscribeProfiles();
@@ -1140,13 +1089,11 @@
           useEffect(() => {
 			fetchExchangeRates().then(result => {
 				setLiveExchangeRates(result.rates);
-				setLastExchangeUpdate(result.lastUpdate); // ⬅ 新增這行
+				setLastExchangeUpdate(result.lastUpdate);
 			});
 		  }, []);
 
-
-          
-          // 登出函式
+          // 登出
           const logout = useCallback(async () => {
             if (auth) {
                 try {
@@ -1160,13 +1107,10 @@
             }
           }, [auth]);
 
-
           // --- 4. 數據獲取 (Firestore 監聽) ---
           useEffect(() => {
-            // 只有當認證完成且有 Collection ID 時才開始監聽
             if (!authReady || !db || !currentCollectionId) return; 
 
-            // --- A. 監聽支出記錄 ---
             const expensesCollectionPath = `artifacts/${appId}/users/${currentCollectionId}/expenses`;
             const expensesRef = db.collection(expensesCollectionPath);
 
@@ -1175,11 +1119,10 @@
                 const data = docSnap.data();
                 const timestamp = data.timestamp ? data.timestamp.toDate() : null; 
                 
-                // 處理幣別轉換欄位的預設值
-                const originalAmount = data.originalAmount !== undefined ? data.originalAmount : data.amount; // 兼容舊資料
+                const originalAmount = data.originalAmount !== undefined ? data.originalAmount : data.amount;
                 const currency = data.currency || DEFAULT_CURRENCY;
-                const exchangeRate = data.exchangeRate || (DEFAULT_EXCHANGE_RATES[currency] || 1.0); // 使用預設匯率
-                const amountInTWD = data.amountInTWD !== undefined ? data.amountInTWD : originalAmount * exchangeRate; // 兼容舊資料
+                const exchangeRate = data.exchangeRate || (DEFAULT_EXCHANGE_RATES[currency] || 1.0);
+                const amountInTWD = data.amountInTWD !== undefined ? data.amountInTWD : originalAmount * exchangeRate;
 
                 return {
                   id: docSnap.id, 
@@ -1196,19 +1139,18 @@
             }, (err) => {
               console.error(`Error listening to expenses in collection ${currentCollectionId}:`, err);
               if (err.code === 'permission-denied') {
-                  setError(`權限不足：無法讀取 ID 為 ${currentCollectionId} 的紀錄簿。請確認您有權限或 ID 正確。`);
+                  setError(`權限不足：無法讀取此分享連結對應的紀錄簿（ID: ${currentCollectionId}）。請洽擁有者確認權限。`);
               } else {
                   setError(`資料同步失敗: ${err.message}`);
               }
-              setExpenses([]); // 如果權限不足，清空當前列表
+              setExpenses([]);
             });
 
-            // --- B. 監聽成員設定 ---
             const membersDocPath = `artifacts/${appId}/users/${currentCollectionId}/settings/members`;
             const membersDocRef = db.doc(membersDocPath);
 
             const unsubscribeMembers = membersDocRef.onSnapshot((docSnap) => {
-                if (docSnap.exists) { 
+                if (docSnap.exists) {
                     const data = docSnap.data();
                     const list = Array.isArray(data.list) ? data.list : [];
                     const shares = data.defaultShares || {};
@@ -1227,9 +1169,9 @@
               unsubscribeExpenses();
               unsubscribeMembers();
             };
-          }, [authReady, db, currentCollectionId]); // 依賴 currentCollectionId
+          }, [authReady, db, currentCollectionId]);
 
-          // --- 5. 衍生狀態：計算最終成員清單 ---
+          // --- 5. 衍生成員清單 ---
           useEffect(() => {
             let currentMembers = [currentCollectionId].filter(Boolean); 
             
@@ -1240,12 +1182,8 @@
             });
 
             setMembers(currentMembers.sort());
-
           }, [currentCollectionId, customMembers]);
 
-          /**
-           * 根據當前的成員清單和預設份數配置，產生初始的分帳份數物件
-           */
           const getInitialShares = useCallback(() => {
             return members.reduce((acc, name) => {
                 const shareValue = defaultSharesConfig[name] !== undefined ? defaultSharesConfig[name] : 1;
@@ -1254,8 +1192,7 @@
             }, {});
           }, [members, defaultSharesConfig]);
 
-
-          // --- Modal 開啟/關閉和模式控制 ---
+          // --- Modal 開關 ---
           const openConfirmModal = useCallback((title, message, onConfirm, confirmText = '確認', confirmColor = 'red') => {
               setConfirmModalState({
                   isOpen: true,
@@ -1270,7 +1207,6 @@
           const closeConfirmModal = useCallback(() => {
               setConfirmModalState(prev => ({ ...prev, isOpen: false }));
           }, []);
-
 
           const startAdd = useCallback(() => {
             if (isReadOnly) {
@@ -1288,12 +1224,12 @@
              if (isReadOnly) {
                 setError('您正在瀏覽共享紀錄簿，無法進行修改。請切換回您的私有紀錄簿。');
                 return;
-            }
-            setExpenseModalState({
+             }
+             setExpenseModalState({
                 isOpen: true,
                 editingExpense: expense,
                 isEditing: true,
-            });
+             });
           }, [isReadOnly]);
 
           const closeExpenseModal = useCallback(() => {
@@ -1305,12 +1241,8 @@
             setError(null);
           }, []);
 
+          // --- 6. 支出 CRUD ---
 
-          // --- 6. 支出 CRUD 操作 ---
-
-          /**
-           * 刪除支出記錄
-           */
           const deleteExpense = useCallback(async (id) => {
             if (isReadOnly) {
                 setError('唯讀模式下無法刪除。');
@@ -1334,11 +1266,8 @@
             };
             
             openConfirmModal('確認刪除支出', '您確定要刪除這筆支出記錄嗎？此操作無法撤銷。', onConfirm);
-          }, [db, appId, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
-          
-          /**
-           * 清空所有支出記錄
-           */
+          }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
+
           const clearAllExpenses = useCallback(async () => {
               if (isReadOnly) {
                   setError('唯讀模式下無法清除資料。');
@@ -1359,7 +1288,6 @@
                           batch.delete(doc.ref);
                       });
                       await batch.commit();
-                      
                   } catch (e) {
                       console.error("Error clearing all documents: ", e);
                       setError(`清除所有資料失敗: ${e.message}`);
@@ -1373,14 +1301,9 @@
                   '您確定要刪除此記帳簿中的所有支出記錄嗎？（成員清單和預設份數將被保留）', 
                   onConfirm
               );
-          }, [db, appId, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
+          }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
 
-
-          // --- 7. 成員管理邏輯 ---
-          
-          /**
-           * 儲存成員清單和當前的預設份數設定
-           */
+          // --- 7. 成員管理 ---
           const saveMembers = useCallback(async (newMemberList) => {
             if (isReadOnly) return;
             if (!db) return;
@@ -1410,8 +1333,8 @@
             } finally {
                 setIsLoading(false);
             }
-          }, [db, appId, currentCollectionId, isReadOnly, members, defaultSharesConfig]);
-          
+          }, [db, currentCollectionId, isReadOnly, members, defaultSharesConfig]);
+
           const handleDeleteMember = useCallback(async (nameToDelete) => {
             if (isReadOnly) return;
             
@@ -1428,10 +1351,7 @@
             );
 
           }, [customMembers, saveMembers, isReadOnly, openConfirmModal, closeConfirmModal, getDisplayName]);
-          
-          /**
-           * 儲存預設份數設定
-           */
+
           const handleSaveDefaultShares = useCallback(async (tempShares) => {
             if (isReadOnly) return;
             if (!db) return;
@@ -1453,7 +1373,6 @@
                 });
                 
                 await membersDocRef.set({ list: customMembers, defaultShares: sharesToSave }, { merge: false });
-                
                 setIsMemberModalOpen(false);
             } catch (e) {
                 console.error("Error saving default shares:", e);
@@ -1461,17 +1380,9 @@
             } finally {
                 setIsLoading(false);
             }
-          }, [db, appId, currentCollectionId, customMembers, members, isReadOnly]);
+          }, [db, currentCollectionId, customMembers, members, isReadOnly]);
 
-
-          // --- 8. 清算結餘功能 (新增) ---
-          
-          /**
-           * 結算單一成員的欠款
-           * @param {string} debtorId - 欠款人/債務人 ID
-           * @param {number} amount - 欠款金額 (正數)
-           * @param {string} creditorId - 收款人/債權人 ID
-           */
+          // --- 8. 清算結餘功能 ---
           const settleMemberDebt = useCallback(async (debtorId, amount, creditorId) => {
               if (isReadOnly) {
                   setError('唯讀模式下無法進行結算操作。');
@@ -1487,15 +1398,17 @@
                   setIsLoading(true);
                   setError(null);
                   try {
-                      // 建立一筆支出記錄來平衡帳目
                       const collectionPath = `artifacts/${appId}/users/${currentCollectionId}/expenses`;
                       
-                      // 由於清算項目是 debtorId -> creditorId，我們記錄的支出是 debtorId 付給 creditorId 的錢
+                      // 使用新欄位格式：originalAmount / currency / amountInTWD
                       await db.collection(collectionPath).add({
                           description: `[結清] ${getDisplayName(debtorId)} 歸還給 ${getDisplayName(creditorId)} 欠款`,
-                          amount: roundedAmount,
-                          payerName: debtorId, // 欠款人支付 (款項來源)
-                          shares: { [creditorId]: roundedAmount }, // 收款人承擔這筆費用，使得他的淨餘額增加
+                          originalAmount: roundedAmount,
+                          currency: DEFAULT_CURRENCY,
+                          exchangeRate: 1,
+                          amountInTWD: roundedAmount,
+                          payerName: debtorId,
+                          shares: { [creditorId]: roundedAmount },
                           timestamp: serverTimestamp(),
                           creatorId: userId,
                           appId: appId,
@@ -1519,17 +1432,11 @@
 
           }, [db, userId, currentCollectionId, isReadOnly, getDisplayName, openConfirmModal, closeConfirmModal]);
 
-
-          // --- 9. 分帳計算邏輯 (與之前相同) ---
-
-          /**
-           * 計算每個成員的最終餘額（應付/應收）
-           */
+          // --- 9. 分帳計算 ---
           const calculateBalances = useMemo(() => {
             const balances = members.reduce((acc, name) => ({ ...acc, [name]: 0 }), {});
 
             expenses.forEach(expense => {
-              // 修正: 確保使用 amountInTWD 進行計算
               const amount = expense.amountInTWD; 
               const { payerName, shares } = expense;
               const totalShares = Object.values(shares).reduce((sum, s) => sum + s, 0);
@@ -1553,9 +1460,6 @@
             return balances;
           }, [expenses, members]);
 
-          /**
-           * 計算清算方案：最少次數的轉帳來結清所有債務
-           */
           const calculateSettlements = useMemo(() => {
             const balances = calculateBalances;
             const settlements = [];
@@ -1605,35 +1509,25 @@
             return settlements;
           }, [calculateBalances]); 
 
-          // --- 10. UI 輔助元件 ---
-
-          // 獲取顯示名稱（使用公共暱稱/Auth Profile/UID）
+          // --- 10. UI 輔助 ---
           const getDisplayName = useCallback((memberId) => {
-            
-            // 1. 優先從公共 profiles 查找暱稱
             if (userProfiles[memberId]) {
                 return userProfiles[memberId];
             }
             
-            // 2. 當前登入者 (使用 Auth Profile 暱稱或 Email)
             if (memberId === userId) {
-                const currentUser = auth.currentUser;
-                // 備用方案: 如果沒有暱稱，顯示 Email
+                const currentUser = auth?.currentUser;
                 return currentUser?.displayName || currentUser?.email || '我 (You)';
             }
             
-            // 3. 紀錄簿擁有者 (共享模式下的備用顯示)
-            if (memberId === currentCollectionId) {
-                // 如果找不到暱稱，則顯示 UID 的簡短形式
+            if (memberId === currentCollectionId && memberId) {
                 const shortId = memberId.substring(0, 5) + '...' + memberId.substring(memberId.length - 5);
-                return `${shortId}`; // 移除 (擁有者)，讓 CollectionSwitch 負責添加標記
+                return shortId;
             }
             
-            // 4. 其他成員 (自訂名稱或找不到的 UID)
             return memberId;
           }, [userId, auth, currentCollectionId, userProfiles]);
           
-          // 格式化時間戳
           const formatTimestamp = (timestamp) => {
             if (!timestamp) return '無日期';
             const date = timestamp instanceof Date ? timestamp : (timestamp.toDate ? timestamp.toDate() : null);
@@ -1648,28 +1542,25 @@
             });
           };
 
-          // --- 渲染邏輯 ---
-          
+          // --- 渲染 ---
           if (!authReady) {
             return (
                 <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                    <p className={`text-lg text-${primaryColor}-600`}>載入驗證服務...</p>
+                    <p className="text-lg text-primaryColor-600">載入驗證服務...</p>
                 </div>
             );
           }
           
           if (!userId || !auth) {
-            // 修正：傳遞 db 實例給 AuthModal 以進行暱稱儲存
             return <AuthModal auth={auth} db={db} />;
           }
-
 
           return (
             <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
               <div className="max-w-4xl mx-auto">
                 {/* 標題和主要操作按鈕 */}
                 <header className="py-6 border-b border-gray-200">
-                  <h1 className={`text-4xl font-extrabold text-${primaryColor}-700 flex items-center`}>
+                  <h1 className="text-4xl font-extrabold text-primaryColor-700 flex items-center">
                     <Pencil className="w-10 h-10 mr-3" />
                     分帳記帳簿
                   </h1>
@@ -1695,10 +1586,9 @@
                 <CollectionSwitch 
                     userId={userId} 
                     currentCollectionId={currentCollectionId} 
-                    setCurrentCollectionId={setCurrentCollectionId} 
                     getDisplayName={getDisplayName}
                     logout={logout}
-                    userProfiles={userProfiles} // 傳遞 userProfiles
+                    userProfiles={userProfiles}
                 />
 
                 {/* 主要功能區塊 */}
@@ -1706,9 +1596,10 @@
                   <button
                     onClick={startAdd}
                     disabled={isReadOnly}
-                    className={`flex-1 flex items-center justify-center px-4 py-3 rounded-xl text-white transition duration-300 shadow-xl hover:scale-[1.03] transform disabled:bg-gray-400 disabled:cursor-not-allowed ${
-                        isReadOnly ? 'bg-gray-400' : `bg-${primaryColor}-500 hover:bg-${primaryColor}-600 focus:ring-4 focus:ring-${primaryColor}-300`
-                    }`}
+                    className={
+                      "flex-1 flex items-center justify-center px-4 py-3 rounded-xl text-white transition duration-300 shadow-xl hover:scale-[1.03] transform disabled:bg-gray-400 disabled:cursor-not-allowed " +
+                      (isReadOnly ? "bg-gray-400" : "bg-primaryColor-500 hover:bg-primaryColor-600 focus:ring-4 focus:ring-primaryColor-300")
+                    }
                   >
                     <Plus className="w-6 h-6 mr-2" />
                     新增支出 {isReadOnly && '(唯讀)'}
@@ -1716,9 +1607,12 @@
                   <button
                     onClick={() => { setIsMemberModalOpen(true); setError(null); }}
                     disabled={isReadOnly}
-                    className={`px-4 py-3 border text-lg font-bold rounded-xl bg-white focus:outline-none focus:ring-4 focus:ring-${primaryColor}-300 transition duration-300 shadow-xl hover:scale-[1.03] transform disabled:border-gray-400 disabled:text-gray-400 disabled:cursor-not-allowed ${
-                        isReadOnly ? 'border-gray-400 text-gray-400' : `border-${primaryColor}-500 text-${primaryColor}-600 hover:bg-${primaryColor}-50`
-                    }`}
+                    className={
+                      "px-4 py-3 border text-lg font-bold rounded-xl bg-white focus:outline-none focus:ring-4 transition duration-300 shadow-xl hover:scale-[1.03] transform disabled:border-gray-400 disabled:text-gray-400 disabled:cursor-not-allowed " +
+                      (isReadOnly
+                        ? "border-gray-400 text-gray-400"
+                        : "focus:ring-primaryColor-300 border-primaryColor-500 text-primaryColor-600 hover:bg-primaryColor-50")
+                    }
                     aria-label="管理成員與預設份數"
                   >
                     <Users className="w-6 h-6" />
@@ -1732,8 +1626,7 @@
                     members={members} 
                     getDisplayName={getDisplayName} 
                     isReadOnly={isReadOnly}
-                    settleMemberDebt={settleMemberDebt} // 傳遞結清功能
-                    currentCollectionId={currentCollectionId}
+                    settleMemberDebt={settleMemberDebt}
                 />
                 <ExpenseList 
                     expenses={expenses} 
@@ -1743,12 +1636,12 @@
                     getDisplayName={getDisplayName} 
                     formatTimestamp={formatTimestamp}
                     isReadOnly={isReadOnly}
-                    clearAllExpenses={clearAllExpenses} // 傳遞清空功能
+                    clearAllExpenses={clearAllExpenses}
                 />
 
                 {/* Modal 區塊 */}
                 <ExpenseModal 
-                    key={expenseModalState.isEditing ? `edit-${expenseModalState.editingExpense.id}` : 'add-new'}
+                    key={expenseModalState.isEditing && expenseModalState.editingExpense ? `edit-${expenseModalState.editingExpense.id}` : 'add-new'}
                     db={db}
                     currentUserId={userId}
                     members={members}
@@ -1776,7 +1669,6 @@
                     setError={setError}
                     getDisplayName={getDisplayName}
                     isReadOnly={isReadOnly}
-                    collectionId={currentCollectionId}
                 />
                 
                 {/* 統一的確認提示 Modal */}
@@ -1791,20 +1683,19 @@
                 />
               </div>
 
-              {/* Tailwind color class fix, ensuring primaryColor is rendered */}
-              <div className={`text-${primaryColor}-500 bg-${primaryColor}-500 border-${primaryColor}-500 hidden`}></div>
+              {/* Tailwind color class fix, 讓 primaryColor 類別一定出現在檔案中 */}
+              <div className="text-primaryColor-500 bg-primaryColor-500 border-primaryColor-500 hidden"></div>
             </div>
           );
         };
         
-        // --- 獨立的列表和總結組件 (從 App 移出) ---
-        
+        // --- 獨立的列表和總結組件 ---
         const ExpenseList = React.memo(({ expenses, deleteExpense, startEdit, isLoading, getDisplayName, formatTimestamp, isReadOnly, clearAllExpenses }) => {
             const sortedExpenses = useMemo(() => {
                 return [...expenses].sort((a, b) => {
                     const timeA = a.timestamp ? a.timestamp.getTime() : 0;
                     const timeB = b.timestamp ? b.timestamp.getTime() : 0;
-                    return timeB - timeA; // 降序 (新到舊)
+                    return timeB - timeA;
                 });
             }, [expenses]);
               
@@ -1834,9 +1725,8 @@
                       const sharesDetail = Object.entries(exp.shares)
                         .filter(([, share]) => share > 0)
                         .map(([name, share]) => `${getDisplayName(name)} (${share}份)`)
-                        .join(', ')
+                        .join(', ');
 
-                      // 修正: 顯示原始幣別和換算金額
                       const displayAmount = `${exp.currency} ${Math.round(exp.originalAmount).toFixed(0)}`;
                       const convertedTWD = exp.currency !== DEFAULT_CURRENCY ? ` (TWD ${exp.amountInTWD.toFixed(0)})` : '';
 
@@ -1844,7 +1734,6 @@
                         <div key={exp.id} className="bg-white p-4 rounded-xl shadow-lg border-l-4 border-primaryColor-400 flex justify-between items-center transition duration-150 hover:shadow-xl">
                           <div className="flex-grow">
                             <p className="font-semibold text-lg text-gray-800">{exp.description}</p>
-                            {/* 顯示原始幣別和 TWD 換算 */}
                             <p className="text-3xl font-extrabold text-primaryColor-600 my-1">
                                 {displayAmount}
                                 <span className="text-xl font-normal text-gray-500">{convertedTWD}</span>
@@ -1859,7 +1748,6 @@
                               <span className="font-medium">時間:</span> {formatTimestamp(exp.timestamp)}
                             </p>
                           </div>
-                          {/* 唯讀模式下禁用編輯和刪除按鈕 */}
                           <div className={`flex space-x-2 ${isReadOnly ? 'opacity-50' : ''}`}>
                             <button
                               onClick={() => startEdit(exp)}
@@ -1885,9 +1773,9 @@
                 )}
               </div>
             );
-          });
+        });
 
-          const BalanceSummary = React.memo(({ settlements, balances, members, getDisplayName, isReadOnly, settleMemberDebt, currentCollectionId }) => {
+        const BalanceSummary = React.memo(({ settlements, balances, members, getDisplayName, isReadOnly, settleMemberDebt }) => {
             const debtorBalances = useMemo(() => {
                 return members.filter(member => Math.round(balances[member] || 0) < 0)
                                .map(member => ({
@@ -1911,8 +1799,6 @@
                     <div className="space-y-4">
                         <p className="text-base text-gray-600 mb-4">結清帳目所需的轉帳清單（四捨五入）：</p>
                         {settlements.map((settlement, index) => {
-                            // 判斷按鈕類型
-                            // 修正: 紀錄簿擁有者可以代為確認所有轉帳
                             const canSettle = !isReadOnly; 
 
                             return (
@@ -1925,7 +1811,7 @@
                                         <div className="text-gray-800">
                                             <p className="text-lg">
                                                 <span className="font-bold text-red-600">{getDisplayName(settlement.from)}</span>
-                                                <span className="mx-1 text-gray-500">應付給</span>
+                                                <span className="mx-0 text-gray-500">應付給</span>
                                                 <span className="font-bold text-green-600">{getDisplayName(settlement.to)}</span>
                                             </p>
                                             <p className="text-3xl font-extrabold text-yellow-700 mt-1">
@@ -1934,17 +1820,15 @@
                                         </div>
                                     </div>
                                     
-                                    {/* 修正: 紀錄簿擁有者可以代為結清所有轉帳 */}
                                     {canSettle && (
                                         <button
                                             onClick={() => settleMemberDebt(settlement.from, settlement.amount, settlement.to)} 
-                                            className={`px-3 py-1 text-sm rounded-lg text-white transition hover:scale-105 transform shadow-md flex items-center bg-green-500 hover:bg-green-600`}
+                                            className="px-3 py-1 text-sm rounded-lg text-white transition hover:scale-105 transform shadow-md flex items-center bg-green-500 hover:bg-green-600"
                                         >
                                             <CircleCheck className="w-4 h-4 mr-1" />
                                             結清
                                         </button>
                                     )}
-                                    {/* 唯讀模式下顯示狀態 (可選) */}
                                     {isReadOnly && (
                                          <span className="text-sm text-gray-500 italic">僅擁有者可操作</span>
                                     )}
@@ -1953,12 +1837,9 @@
                         })}
                     </div>
                 )}
-                
-                {/* 移除了個人總結餘 (參考) */}
-                
               </div>
             );
-          });
+        });
         
         // Render the app
         const root = ReactDOM.createRoot(document.getElementById('root'));
