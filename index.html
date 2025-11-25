@@ -91,6 +91,7 @@
             strokeWidth: 2,
             strokeLinecap: "round",
             strokeLinejoin: "round",
+            fill: "none", // 確保 SVG 圖標沒有填充，只顯示線條
         };
         
         const CircleDollarSign = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v1M12 17v1M16 8h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2z"></path></svg>;
@@ -99,7 +100,8 @@
         const Minus = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M5 12h14"></path></svg>;
         const Users = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
         const X = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>;
-        const Check = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"></path></svg>;
+        // 修正 2: Check 替換為 CircleCheck 的 SVG (圓圈勾)
+        const CircleCheck = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14 9 11"></polyline></svg>;
         const Pencil = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>;
         const UserPlus = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="16" x2="22" y1="11" y2="11"></line></svg>;
         const UserMinus = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" x2="16" y1="11" y2="11"></line></svg>;
@@ -702,7 +704,7 @@
                     >
                       {isLoadingModal ? '儲存中...' : (
                         <>
-                          <Check className="w-5 h-5 mr-2" />
+                          <CircleCheck className="w-5 h-5 mr-2" />
                           {submitText}
                         </>
                       )}
@@ -893,7 +895,7 @@
                           >
                               {isLoading ? '儲存中...' : (
                                   <>
-                                      <Check className="w-5 h-5 mr-2" />
+                                      <CircleCheck className="w-5 h-5 mr-2" />
                                       儲存預設份數
                                   </>
                               )}
@@ -1565,7 +1567,7 @@
                   <button
                     onClick={startAdd}
                     disabled={isReadOnly}
-                    className={`flex-1 flex items-center justify-center px-4 py-3 border border-transparent text-lg font-bold rounded-xl text-white transition duration-300 shadow-xl hover:scale-[1.03] transform disabled:bg-gray-400 disabled:cursor-not-allowed ${
+                    className={`flex-1 flex items-center justify-center px-4 py-3 rounded-xl text-white transition duration-300 shadow-xl hover:scale-[1.03] transform disabled:bg-gray-400 disabled:cursor-not-allowed ${
                         isReadOnly ? 'bg-gray-400' : `bg-${primaryColor}-500 hover:bg-${primaryColor}-600 focus:ring-4 focus:ring-${primaryColor}-300`
                     }`}
                   >
@@ -1726,7 +1728,7 @@
                             <button
                               onClick={() => deleteExpense(exp.id)}
                               disabled={isLoading || isReadOnly}
-                              className="p-2 text-red-500 bg-white hover:bg-red-50 rounded-full transition duration-150 hover:scale-110 transform border border-transparent hover:border-red-300 shadow-md disabled:cursor-not-allowed"
+                              className="p-2 text-red-500 bg-white hover:bg-blue-50 rounded-full transition duration-150 hover:scale-110 transform border border-transparent hover:border-red-300 shadow-md disabled:cursor-not-allowed"
                               aria-label="刪除支出"
                             >
                               <Trash2 className="w-5 h-5" />
@@ -1763,20 +1765,13 @@
                     <p className="text-lg font-medium text-green-600 p-3 bg-green-50 rounded-lg">🎉 所有帳目已結清！</p>
                 ) : (
                     <div className="space-y-4">
-                        <p className="text-base text-gray-600 mb-4">結清帳目所需的轉帳清單（已四捨五入）：</p>
+                        <p className="text-base text-gray-600 mb-4">結清帳目所需的轉帳清單（四捨五入）：</p>
                         {settlements.map((settlement, index) => {
-                            const isUserDebtor = settlement.from === currentCollectionId; // 我是付款人 (應付)
-                            const isUserCreditor = settlement.to === currentCollectionId; // 我是收款人 (應收)
-                            const isSettleActionable = isUserDebtor || isUserCreditor; // 轉帳涉及我（紀錄簿擁有者）
-                            
-                            // 修正: 判斷該轉帳是否涉及當前登入者 (userId)
+                            // 檢查轉帳是否涉及當前紀錄簿擁有者 (即您)
                             const isTransferInvolvingMe = settlement.from === currentCollectionId || settlement.to === currentCollectionId;
                             
-                            let buttonText = isUserDebtor ? '確認已支付' : '結清';
-                            let buttonColor = isUserDebtor ? 'blue' : 'green';
-
                             // 僅在非只讀模式下允許結清
-                            const canSettle = !isReadOnly; // 紀錄簿擁有者 (currentCollectionId) 可以代為確認所有涉及本紀錄簿的轉帳
+                            const canSettle = !isReadOnly; 
 
                             return (
                                 <div 
@@ -1803,7 +1798,7 @@
                                             onClick={() => settleMemberDebt(settlement.from, settlement.amount, settlement.to)} 
                                             className={`px-3 py-1 text-sm rounded-lg text-white transition hover:scale-105 transform shadow-md flex items-center bg-green-500 hover:bg-green-600`}
                                         >
-                                            <Check className="w-4 h-4 mr-1" />
+                                            <CircleCheck className="w-4 h-4 mr-1" />
                                             結清
                                         </button>
                                     )}
