@@ -100,6 +100,29 @@
             'AUD': 20.0,  // 澳幣
             'NOK': 2.9,   // 挪威克朗
         };
+		
+		// --- 國家 -> 貨幣 對照表（給 GPS 用） ---
+		const COUNTRY_CURRENCY_MAP = {
+			TW: 'TWD',
+			US: 'USD',
+			CA: 'CAD',
+			AU: 'AUD',
+			JP: 'JPY',
+			KR: 'KRW',
+			TH: 'THB',
+			VN: 'VND',
+			ID: 'IDR',
+			NO: 'NOK',
+			// 歐洲常見國家 -> 歐元
+			FR: 'EUR',
+			DE: 'EUR',
+			ES: 'EUR',
+			IT: 'EUR',
+			NL: 'EUR',
+			BE: 'EUR',
+			PT: 'EUR',
+		};
+		
         const CURRENCIES = Object.keys(DEFAULT_EXCHANGE_RATES);
         const DEFAULT_CURRENCY = 'TWD';
 
@@ -477,11 +500,11 @@
         /**
          * 支出 Modal (核心邏輯獨立)
          */
-        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates }) => {
+        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates, defaultCurrency }) => {
             const [newExpense, setNewExpense] = useState({
                 description: '',
                 originalAmount: '',
-                currency: DEFAULT_CURRENCY,
+                currency: defaultCurrency || DEFAULT_CURRENCY,
                 payerName: currentUserId || '',
                 shares: {}, 
             });
@@ -518,7 +541,7 @@
                         setNewExpense({
                             description: '',
                             originalAmount: '',
-                            currency: DEFAULT_CURRENCY,
+                            currency: defaultCurrency || DEFAULT_CURRENCY,
                             payerName: currentUserId || members[0] || '',
                             shares: getInitialShares(),
                         });
@@ -810,6 +833,47 @@
                 }
             }, [isMemberModalOpen, members, defaultSharesConfig]);
             
+			// --- 使用 GPS 偵測所在地，推測預設幣別 ---
+			useEffect(() => {
+				if (!navigator.geolocation) {
+					console.log("此瀏覽器不支援地理定位，使用預設幣別 TWD");
+					return;
+				}
+
+				navigator.geolocation.getCurrentPosition(
+					async (pos) => {
+						const { latitude, longitude } = pos.coords;
+						try {
+							// 使用免費的 reverse geocode API 把經緯度換成國家代碼
+							const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`;
+							const res = await fetch(url);
+							if (!res.ok) throw new Error("reverse geocode API error");
+							const data = await res.json();
+
+							const countryCode = (data.countryCode || "").toUpperCase();
+							setDetectedCountry(countryCode || null);
+
+							const currencyFromCountry = COUNTRY_CURRENCY_MAP[countryCode];
+							if (currencyFromCountry && CURRENCIES.includes(currencyFromCountry)) {
+								console.log("偵測到國家與貨幣：", countryCode, currencyFromCountry);
+								setDefaultCurrency(currencyFromCountry);
+							} else {
+								console.log("未對應到貨幣，維持預設 TWD");
+							}
+						} catch (err) {
+							console.warn("以 GPS 推測幣別失敗：", err);
+						}
+					},
+					(err) => {
+						console.warn("取得 GPS 位置失敗：", err);
+					},
+					{
+						enableHighAccuracy: false,
+						timeout: 10000,
+					}
+				);
+			}, []);
+			
             const handleAddMemberInternal = async () => {
                 if (isReadOnly) return setError('唯讀模式下無法新增成員。');
                 
@@ -990,6 +1054,8 @@
           const [userProfiles, setUserProfiles] = useState({});
 		  const [lastExchangeUpdate, setLastExchangeUpdate] = useState(null);
           const [liveExchangeRates, setLiveExchangeRates] = useState(DEFAULT_EXCHANGE_RATES);
+		  const [defaultCurrency, setDefaultCurrency] = useState(DEFAULT_CURRENCY);
+		  const [detectedCountry, setDetectedCountry] = useState(null);
           
           const [currentCollectionId, setCurrentCollectionId] = useState(null); // 當前正在檢視的紀錄簿 ID (預設為 userId)
           const isReadOnly = userId !== currentCollectionId;
@@ -1572,6 +1638,9 @@
 					  匯率最後更新：{new Date(lastExchangeUpdate).toLocaleString('zh-TW')}
 					</p>
 				  )}
+				  <p className="text-xs text-gray-500 mt-1">
+				    預設幣別：{defaultCurrency}（依裝置 GPS 推測）
+				  </p>
                 </header>
                 
                 {/* 錯誤訊息提示 */}
@@ -1652,6 +1721,7 @@
                     isReadOnly={isReadOnly}
                     collectionId={currentCollectionId}
                     liveExchangeRates={liveExchangeRates}
+					defaultCurrency={defaultCurrency}
                 />
                 <MemberManagementModal 
                     db={db}
