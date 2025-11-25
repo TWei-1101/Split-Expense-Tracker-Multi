@@ -787,27 +787,26 @@
                         })}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="p-6 border-t flex justify-end">
-                    <button
-                      onClick={saveExpense}
-                      disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName}
-                      className={
-                        "flex items-center px-6 py-3 rounded-full text-white font-semibold transition duration-150 shadow-md " +
-                        ((isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName)
-                          ? "bg-gray-400 cursor-not-allowed"
-                          : "bg-primaryColor-600 hover:bg-primaryColor-700 hover:shadow-lg")
-                      }
-                    >
-                      {isLoadingModal ? '儲存中...' : (
-                        <>
-                          <CircleCheck className="w-5 h-5 mr-2" />
-                          {submitText}
-                        </>
-                      )}
-                    </button>
-                  </div>
+					<div className="pt-6 border-t flex justify-end mt-6">
+					  <button
+					    onClick={saveExpense}
+					    disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName}
+					    className={
+						  "flex items-center px-6 py-3 rounded-full text-white font-semibold transition duration-150 shadow-md " +
+						  ((isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName)
+						    ? "bg-gray-400 cursor-not-allowed"
+						    : "bg-primaryColor-600 hover:bg-primaryColor-700 hover:shadow-lg")
+					    }
+					  >
+					    {isLoadingModal ? '儲存中...' : (
+						  <>
+						    <CircleCheck className="w-5 h-5 mr-2" />
+						    {submitText}
+						  </>
+					    )}
+					  </button>
+				    </div>
+				  </div>
                 </div>
               </div>
             );
