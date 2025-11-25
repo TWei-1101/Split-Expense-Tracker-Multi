@@ -48,6 +48,7 @@
         注意：現在需要開啟 Firebase Authentication 的 Email/Password 登入方法
     -->
     <script>
+        // 修正：將這些變數定義在純 JS 區塊，使 Babel 腳本可以訪問
         const __app_id = "YOUR_APP_ID"; // 例如: 'my-splitwise-app-2025'
         // 請替換成您自己的 Firebase 專案配置 JSON
         const __firebase_config = JSON.stringify({
@@ -75,13 +76,79 @@
 
         const { useState, useEffect, useCallback, useMemo } = React;
         
-        const { initializeApp, auth, firestore } = firebase;
-        const serverTimestamp = firestore.FieldValue.serverTimestamp; 
-        
-        // --- 重新定義 Firebase 全域變數 ---
+        // 修正：將全域變數引入 Babel 作用域
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? initialAuthToken : null;
+
+        const { firestore } = firebase;
+        const serverTimestamp = firestore.FieldValue.serverTimestamp; 
+        
+        // --- 匯率設定 (修正: 預設值作為備用) ---
+        const DEFAULT_EXCHANGE_RATES = {
+            'TWD': 1.0,   // 基準貨幣：臺幣
+            'USD': 30.5,  // 美金
+            'THB': 0.85,  // 泰銖
+            'EUR': 33.0,  // 歐元
+            'CAD': 22.5,  // 加幣
+            'VND': 0.0013, // 越南盾 (1000 VND ~ 1.3 TWD)
+            'IDR': 0.002, // 印尼盾 (1000 IDR ~ 2 TWD)
+            'JPY': 0.25,  // 日圓
+            'KRW': 0.023, // 韓元 (1000 KRW ~ 23 TWD)
+            'AUD': 20.0,  // 澳幣
+            'NOK': 2.9,   // 挪威克朗
+        };
+        const CURRENCIES = Object.keys(DEFAULT_EXCHANGE_RATES);
+        const DEFAULT_CURRENCY = 'TWD';
+
+        // --- 匯率獲取函式 (使用 Google Search Tool) ---
+        const fetchExchangeRates = async () => {
+            const liveRates = { [DEFAULT_CURRENCY]: 1.0 };
+            
+            for (const currency of CURRENCIES) {
+                if (currency === DEFAULT_CURRENCY) continue;
+                
+                // 修正：針對越南盾和印尼盾使用換算 TWD/1000 單位，以獲得更穩定的結果
+                const baseCurrency = (currency === 'VND' || currency === 'IDR') ? `${currency} to TWD for 1000 units` : `${currency} to ${DEFAULT_CURRENCY} rate`;
+                const query = baseCurrency;
+                console.log(`Fetching live rate for: ${query}`);
+                
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: query }] }],
+                            tools: [{ "google_search": {} }],
+                            systemInstruction: { parts: [{ text: "Extract only the numerical exchange rate value and return it as a plain floating point number. If you find a range, use the average. If the rate is not found, return 0. (Example: '30.5')" }] },
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                    let rate = parseFloat(text);
+                    
+                    // 特殊處理：VND 和 IDR 需要除以 1000
+                    if ((currency === 'VND' || currency === 'IDR') && !isNaN(rate) && rate > 0) {
+                         rate = rate / 1000;
+                    }
+                    
+                    if (!isNaN(rate) && rate > 0) {
+                        liveRates[currency] = rate;
+                        console.log(`✅ Fetched ${currency} rate: ${rate}`);
+                    } else {
+                         // 確保在失敗時使用預設值
+                        liveRates[currency] = DEFAULT_EXCHANGE_RATES[currency];
+                        console.warn(`❌ Failed to fetch ${currency} rate, using default: ${DEFAULT_EXCHANGE_RATES[currency]}`);
+                    }
+                } catch (e) {
+                    console.error(`Fetch API failed for ${currency}:`, e);
+                    liveRates[currency] = DEFAULT_EXCHANGE_RATES[currency];
+                }
+            }
+            return liveRates;
+        };
+
 
         const primaryColor = 'teal';
         
@@ -451,10 +518,11 @@
         /**
          * 支出 Modal (核心邏輯獨立)
          */
-        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId }) => {
+        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates }) => {
             const [newExpense, setNewExpense] = useState({
                 description: '',
-                amount: '',
+                originalAmount: '', // 修正: 原始金額
+                currency: DEFAULT_CURRENCY, // 修正: 新增幣別
                 payerName: currentUserId || '',
                 shares: {}, 
             });
@@ -465,6 +533,15 @@
             const expenseToEdit = state.editingExpense;
             const modalTitle = isEditing ? '編輯支出記錄' : '新增支出記錄';
             const submitText = isEditing ? '儲存修改' : '確認新增支出';
+            
+            // 計算換算後的臺幣金額
+            // 修正: 優先使用 liveExchangeRates，如果不存在則使用預設值
+            const currentExchangeRate = liveExchangeRates[newExpense.currency] || DEFAULT_EXCHANGE_RATES[newExpense.currency] || 1.0;
+            const amountInTWD = useMemo(() => {
+                const amount = parseFloat(newExpense.originalAmount) || 0;
+                return Math.round(amount * currentExchangeRate);
+            }, [newExpense.originalAmount, currentExchangeRate]);
+
 
             useEffect(() => {
                 if (state.isOpen) {
@@ -475,14 +552,16 @@
                         }), {});
                         setNewExpense({
                             description: expenseToEdit.description,
-                            amount: expenseToEdit.amount,
+                            originalAmount: expenseToEdit.originalAmount, // 修正: 使用原始金額
+                            currency: expenseToEdit.currency || DEFAULT_CURRENCY, // 修正: 使用儲存的幣別
                             payerName: expenseToEdit.payerName,
                             shares: initialShares,
                         });
                     } else {
                         setNewExpense({
                             description: '',
-                            amount: '',
+                            originalAmount: '', // 修正: 原始金額
+                            currency: DEFAULT_CURRENCY, // 修正: 預設幣別
                             payerName: currentUserId || members[0] || '',
                             shares: getInitialShares(),
                         });
@@ -495,7 +574,14 @@
                 const { name, value } = e.target;
                 setNewExpense(prev => ({
                     ...prev,
-                    [name]: name === 'amount' ? parseFloat(value) || '' : value,
+                    [name]: name === 'originalAmount' ? parseFloat(value) || '' : value, // 修正: 監聽原始金額
+                }));
+            };
+
+            const handleCurrencyChange = (e) => {
+                 setNewExpense(prev => ({
+                    ...prev,
+                    currency: e.target.value,
                 }));
             };
 
@@ -528,7 +614,7 @@
                 }
                 if (!db || !currentUserId) return;
 
-                if (!newExpense.description.trim() || newExpense.amount <= 0 || !newExpense.payerName) {
+                if (!newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName) {
                     setModalError('請輸入有效的品項、金額和付款人！');
                     return;
                 }
@@ -538,7 +624,10 @@
                 try {
                     const expenseToSave = {
                         description: newExpense.description,
-                        amount: newExpense.amount,
+                        originalAmount: newExpense.originalAmount, // 修正: 原始金額
+                        currency: newExpense.currency, // 修正: 原始幣別
+                        exchangeRate: currentExchangeRate, // 修正: 儲存匯率
+                        amountInTWD: amountInTWD, // 修正: 儲存臺幣換算後的金額 (用於計算)
                         payerName: newExpense.payerName,
                         shares: Object.entries(newExpense.shares).reduce((acc, [name, share]) => {
                             if (share > 0) acc[name] = share;
@@ -603,19 +692,49 @@
                           disabled={isReadOnly}
                         />
                       </div>
+                      
+                      {/* 幣別選擇與金額輸入 */}
                       <div>
-                        <label htmlFor="amount" className="block text-sm font-medium text-gray-700">金額 (NT$)</label>
-                        <input
-                          key="expense-amount" 
-                          type="number"
-                          id="amount"
-                          name="amount"
-                          value={newExpense.amount}
-                          onChange={handleInputChange}
-                          placeholder="100.00"
-                          className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                          disabled={isReadOnly}
-                        />
+                        <label htmlFor="originalAmount" className="block text-sm font-medium text-gray-700">原始金額</label>
+                        <div className="flex space-x-2 mt-1">
+                          <select
+                              id="currency"
+                              name="currency"
+                              value={newExpense.currency}
+                              onChange={handleCurrencyChange}
+                              className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white disabled:bg-gray-100"
+                              disabled={isReadOnly}
+                          >
+                            {CURRENCIES.map(code => (
+                                <option key={code} value={code}>{code}</option>
+                            ))}
+                          </select>
+                          <input
+                            key="expense-amount" 
+                            type="number"
+                            id="originalAmount"
+                            name="originalAmount"
+                            value={newExpense.originalAmount}
+                            onChange={handleInputChange}
+                            placeholder="100.00"
+                            className="block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
+                            disabled={isReadOnly}
+                          />
+                        </div>
+                        
+                        {/* 顯示換算後的台幣金額 */}
+                        {newExpense.originalAmount > 0 && newExpense.currency !== DEFAULT_CURRENCY && (
+                           <p className="mt-1 text-xs text-gray-500 italic">
+                               換算台幣 (TWD) 約: 
+                               <span className="font-semibold text-primaryColor-600 ml-1">TWD {amountInTWD.toFixed(0)}</span>
+                               (匯率: {currentExchangeRate})
+                           </p>
+                        )}
+                        {newExpense.originalAmount > 0 && newExpense.currency === DEFAULT_CURRENCY && (
+                           <p className="mt-1 text-xs text-gray-500 italic">
+                               分帳計算使用此金額 (TWD)
+                           </p>
+                        )}
                       </div>
                     </div>
 
@@ -695,9 +814,9 @@
                   <div className="p-6 border-t flex justify-end">
                     <button
                       onClick={saveExpense}
-                      disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.amount <= 0 || !newExpense.payerName}
+                      disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName}
                       className={`flex items-center px-6 py-3 rounded-full text-white font-semibold transition duration-150 shadow-md ${
-                        (isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.amount <= 0 || !newExpense.payerName)
+                        (isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName)
                           ? 'bg-gray-400 cursor-not-allowed'
                           : `bg-${primaryColor}-600 hover:bg-${primaryColor}-700 hover:shadow-lg`
                       }`}
@@ -917,6 +1036,8 @@
           const [userId, setUserId] = useState(null); // 當前登入的使用者 ID
           const [authReady, setAuthReady] = useState(false);
           const [userProfiles, setUserProfiles] = useState({}); 
+          // 新增狀態：用於儲存實時匯率
+          const [liveExchangeRates, setLiveExchangeRates] = useState(DEFAULT_EXCHANGE_RATES); 
           
           const [currentCollectionId, setCurrentCollectionId] = useState(null); // 當前正在檢視的紀錄簿 ID (預設為 userId)
           const isReadOnly = userId !== currentCollectionId; // 判斷是否為唯讀模式
@@ -956,7 +1077,7 @@
             }
 
             try {
-              const app = initializeApp(firebaseConfig);
+              const app = firebase.initializeApp(firebaseConfig);
               const _auth = app.auth();
               const _db = app.firestore();
 
@@ -1022,6 +1143,15 @@
             return () => unsubscribeProfiles();
           }, [authReady, db]);
 
+          // --- 3. 獲取實時匯率 ---
+          useEffect(() => {
+              // 只需要在應用程式啟動時獲取一次
+              fetchExchangeRates().then(rates => {
+                  setLiveExchangeRates(rates);
+              });
+          }, []);
+
+
           
           // 登出函式
           const logout = useCallback(async () => {
@@ -1038,7 +1168,7 @@
           }, [auth]);
 
 
-          // --- 3. 數據獲取 (Firestore 監聽) ---
+          // --- 4. 數據獲取 (Firestore 監聽) ---
           useEffect(() => {
             // 只有當認證完成且有 Collection ID 時才開始監聽
             if (!authReady || !db || !currentCollectionId) return; 
@@ -1052,10 +1182,19 @@
                 const data = docSnap.data();
                 const timestamp = data.timestamp ? data.timestamp.toDate() : null; 
                 
+                // 處理幣別轉換欄位的預設值
+                const originalAmount = data.originalAmount !== undefined ? data.originalAmount : data.amount; // 兼容舊資料
+                const currency = data.currency || DEFAULT_CURRENCY;
+                const exchangeRate = data.exchangeRate || (DEFAULT_EXCHANGE_RATES[currency] || 1.0); // 使用預設匯率
+                const amountInTWD = data.amountInTWD !== undefined ? data.amountInTWD : originalAmount * exchangeRate; // 兼容舊資料
+
                 return {
                   id: docSnap.id, 
                   ...data,
-                  amount: typeof data.amount === 'number' ? data.amount : parseFloat(data.amount || 0),
+                  originalAmount: typeof originalAmount === 'number' ? originalAmount : parseFloat(originalAmount || 0),
+                  currency: currency,
+                  exchangeRate: exchangeRate,
+                  amountInTWD: typeof amountInTWD === 'number' ? amountInTWD : parseFloat(amountInTWD || 0),
                   shares: data.shares || {},
                   timestamp: timestamp,
                 };
@@ -1097,7 +1236,7 @@
             };
           }, [authReady, db, currentCollectionId]); // 依賴 currentCollectionId
 
-          // --- 4. 衍生狀態：計算最終成員清單 ---
+          // --- 5. 衍生狀態：計算最終成員清單 ---
           useEffect(() => {
             let currentMembers = [currentCollectionId].filter(Boolean); 
             
@@ -1174,7 +1313,7 @@
           }, []);
 
 
-          // --- 5. 支出 CRUD 操作 ---
+          // --- 6. 支出 CRUD 操作 ---
 
           /**
            * 刪除支出記錄
@@ -1244,7 +1383,7 @@
           }, [db, appId, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
 
 
-          // --- 6. 成員管理邏輯 ---
+          // --- 7. 成員管理邏輯 ---
           
           /**
            * 儲存成員清單和當前的預設份數設定
@@ -1332,7 +1471,7 @@
           }, [db, appId, currentCollectionId, customMembers, members, isReadOnly]);
 
 
-          // --- 7. 清算結餘功能 (新增) ---
+          // --- 8. 清算結餘功能 (新增) ---
           
           /**
            * 結算單一成員的欠款
@@ -1379,7 +1518,7 @@
               
               openConfirmModal(
                   '確認轉帳結清', 
-                  `您確定 ${getDisplayName(debtorId)} 已向 ${getDisplayName(creditorId)} 支付 NT$ ${roundedAmount.toFixed(0)} 並結清欠款嗎？`, 
+                  `您確定 ${getDisplayName(debtorId)} 已向 ${getDisplayName(creditorId)} 支付 TWD ${roundedAmount.toFixed(0)} 並結清欠款嗎？`, 
                   onConfirm, 
                   '確認結清', 
                   'green'
@@ -1388,7 +1527,7 @@
           }, [db, userId, currentCollectionId, isReadOnly, getDisplayName, openConfirmModal, closeConfirmModal]);
 
 
-          // --- 8. 分帳計算邏輯 (與之前相同) ---
+          // --- 9. 分帳計算邏輯 (與之前相同) ---
 
           /**
            * 計算每個成員的最終餘額（應付/應收）
@@ -1397,7 +1536,9 @@
             const balances = members.reduce((acc, name) => ({ ...acc, [name]: 0 }), {});
 
             expenses.forEach(expense => {
-              const { amount, payerName, shares } = expense;
+              // 修正: 確保使用 amountInTWD 進行計算
+              const amount = expense.amountInTWD; 
+              const { payerName, shares } = expense;
               const totalShares = Object.values(shares).reduce((sum, s) => sum + s, 0);
 
               if (totalShares === 0) return;
@@ -1471,7 +1612,7 @@
             return settlements;
           }, [calculateBalances]); 
 
-          // --- 9. UI 輔助元件 ---
+          // --- 11. UI 輔助元件 ---
 
           // 獲取顯示名稱（使用公共暱稱/Auth Profile/UID）
           const getDisplayName = useCallback((memberId) => {
@@ -1619,6 +1760,7 @@
                     getDisplayName={getDisplayName} 
                     isReadOnly={isReadOnly}
                     collectionId={currentCollectionId}
+                    liveExchangeRates={liveExchangeRates}
                 />
                 <MemberManagementModal 
                     db={db}
@@ -1698,12 +1840,19 @@
 
                       const creatorDisplay = exp.creatorId ? `創建者: ${getDisplayName(exp.creatorId)}` : '';
 
+                      // 修正: 顯示原始幣別和換算金額
+                      const displayAmount = `${exp.currency} ${Math.round(exp.originalAmount).toFixed(0)}`;
+                      const convertedTWD = exp.currency !== DEFAULT_CURRENCY ? ` (TWD ${exp.amountInTWD.toFixed(0)})` : '';
 
                       return (
                         <div key={exp.id} className="bg-white p-4 rounded-xl shadow-lg border-l-4 border-primaryColor-400 flex justify-between items-center transition duration-150 hover:shadow-xl">
                           <div className="flex-grow">
                             <p className="font-semibold text-lg text-gray-800">{exp.description}</p>
-                            <p className="text-3xl font-extrabold text-primaryColor-600 my-1">NT$ {Math.round(exp.amount).toFixed(0)}</p> 
+                            {/* 顯示原始幣別和 TWD 換算 */}
+                            <p className="text-3xl font-extrabold text-primaryColor-600 my-1">
+                                {displayAmount}
+                                <span className="text-xl font-normal text-gray-500">{convertedTWD}</span>
+                            </p> 
                             <p className="text-sm text-gray-600">
                               <span className="font-medium text-primaryColor-700">付款人:</span> {getDisplayName(exp.payerName)}
                             </p>
@@ -1767,10 +1916,11 @@
                     <div className="space-y-4">
                         <p className="text-base text-gray-600 mb-4">結清帳目所需的轉帳清單（四捨五入）：</p>
                         {settlements.map((settlement, index) => {
-                            // 檢查轉帳是否涉及當前紀錄簿擁有者 (即您)
-                            const isTransferInvolvingMe = settlement.from === currentCollectionId || settlement.to === currentCollectionId;
+                            // 判斷按鈕類型
+                            const isUserDebtor = settlement.from === currentCollectionId; // 我是付款人 (應付)
+                            const isUserCreditor = settlement.to === currentCollectionId; // 我是收款人 (應收)
                             
-                            // 僅在非只讀模式下允許結清
+                            // 修正: 紀錄簿擁有者可以代為確認所有轉帳
                             const canSettle = !isReadOnly; 
 
                             return (
@@ -1787,7 +1937,7 @@
                                                 <span className="font-bold text-green-600">{getDisplayName(settlement.to)}</span>
                                             </p>
                                             <p className="text-3xl font-extrabold text-yellow-700 mt-1">
-                                                NT$ {settlement.amount.toFixed(0)}
+                                                TWD {settlement.amount.toFixed(0)}
                                             </p>
                                         </div>
                                     </div>
