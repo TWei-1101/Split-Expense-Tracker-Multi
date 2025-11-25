@@ -1840,8 +1840,6 @@
                         .map(([name, share]) => `${getDisplayName(name)} (${share}份)`)
                         .join(', ');
 
-                      const creatorDisplay = exp.creatorId ? `創建者: ${getDisplayName(exp.creatorId)}` : '';
-
                       // 修正: 顯示原始幣別和換算金額
                       const displayAmount = `${exp.currency} ${Math.round(exp.originalAmount).toFixed(0)}`;
                       const convertedTWD = exp.currency !== DEFAULT_CURRENCY ? ` (TWD ${exp.amountInTWD.toFixed(0)})` : '';
@@ -1863,7 +1861,6 @@
                             </p>
                             <p className="text-xs text-gray-400 mt-1">
                               <span className="font-medium">時間:</span> {formatTimestamp(exp.timestamp)}
-                              {creatorDisplay && <span className="ml-4 font-medium text-gray-500">{creatorDisplay}</span>}
                             </p>
                           </div>
                           {/* 唯讀模式下禁用編輯和刪除按鈕 */}
