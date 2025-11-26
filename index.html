@@ -789,8 +789,8 @@
          * 成員管理 Modal (核心邏輯獨立)
          * 已移除未使用的 collectionId 參數
          */
-        const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly }) => {
-            const [newMemberName, setNewMemberName] = useState(''); 
+        const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly, groupMembers, groupOwner, inviteUserByEmail, removeGroupMember }) => {
+            const [memberInput, setMemberInput] = useState('');
             const [tempDefaultShares, setTempDefaultShares] = useState({});
 
             useEffect(() => {
@@ -801,7 +801,7 @@
                         return acc;
                     }, {});
                     setTempDefaultShares(initialShares);
-                    setNewMemberName('');
+                    setMemberInput('');
                 }
             }, [isMemberModalOpen, members, defaultSharesConfig]);
             
@@ -846,18 +846,43 @@
 				);
 			}, []);
 			
-            const handleAddMemberInternal = async () => {
-                if (isReadOnly) return setError('唯讀模式下無法新增成員。');
-                
-                const trimmedName = newMemberName.trim();
-                if (trimmedName && trimmedName !== currentUserId && !customMembers.includes(trimmedName)) {
-                    const newMemberList = [...customMembers, trimmedName];
-                    await saveMembers(newMemberList); 
-                    setNewMemberName('');
-                } else if (trimmedName === currentUserId) {
-                    setError("不能將自己的用戶 ID 新增為成員。");
-                }
-            };
+			// 只處理「一般成員名稱」→ 加到分帳成員名單
+			const handleAddMemberByName = async (name) => {
+			  if (isReadOnly) return setError('唯讀模式下無法新增成員。');
+
+			  const trimmedName = name.trim();
+			  if (
+				trimmedName &&
+				trimmedName !== currentUserId &&
+				!customMembers.includes(trimmedName)
+			  ) {
+				const newMemberList = [...customMembers, trimmedName];
+				await saveMembers(newMemberList);
+			  } else if (trimmedName === currentUserId) {
+				setError('不能將自己的用戶 ID 新增為成員。');
+			  }
+			};
+
+			// 共用：判斷是名稱還是 Email
+			const handleSubmitMemberInput = async () => {
+			  if (isReadOnly) {
+				setError('唯讀模式下無法新增或邀請成員。');
+				return;
+			  }
+
+			  const input = memberInput.trim();
+			  if (!input) return;
+
+			  if (input.includes('@')) {
+				// Email → 邀請共享成員
+				await inviteUserByEmail(input);
+			  } else {
+				// 一般成員名稱
+				await handleAddMemberByName(input);
+			  }
+
+			  setMemberInput('');
+			};
             
             const handleTempShareChange = (name, delta) => {
                 setTempDefaultShares(prev => {
@@ -900,36 +925,84 @@
                       </div>
                       
                       <div className="p-6 space-y-6">
-                          {/* 新增成員 */}
-                          <div className="border p-4 rounded-lg bg-gray-50">
-                              <h4 className="font-semibold text-lg mb-3 flex items-center text-primaryColor-700">
-                                  <UserPlus className="w-5 h-5 mr-2" /> 新增成員
-                              </h4>
-                              <div className="flex gap-2 items-center"> 
-                                  <input
-                                      key="new-member-name" 
-                                      type="text"
-                                      value={newMemberName} 
-                                      onChange={(e) => setNewMemberName(e.target.value)}
-                                      onKeyDown={(e) => e.key === 'Enter' && handleAddMemberInternal()}
-                                      placeholder="輸入新成員名稱 (例如: 小明)"
-                                      className="flex-grow border border-gray-300 rounded-lg p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
-                                      disabled={isLoading || isReadOnly}
-                                  />
-                                  <button
-                                      onClick={handleAddMemberInternal} 
-                                      className={
-                                        "flex-shrink-0 px-4 py-3 rounded-lg text-white font-semibold transition hover:scale-105 transform " +
-                                        (newMemberName.trim() === '' || isLoading || isReadOnly
-                                          ? "bg-gray-400 cursor-not-allowed"
-                                          : "bg-primaryColor-600 hover:bg-primaryColor-700")
-                                      }
-                                      disabled={newMemberName.trim() === '' || isLoading || isReadOnly}
-                                  >
-                                      新增
-                                  </button>
-                              </div>
-                          </div>
+							{/* 成員管理 + 共享權限（合併版） */}
+							<div className="border p-4 rounded-lg bg-gray-50">
+							  <h4 className="font-semibold text-lg mb-2 flex items-center text-primaryColor-700">
+								<Users className="w-5 h-5 mr-2" />
+								管理分帳成員與共享權限
+							  </h4>
+
+							  {/* 單一輸入框：名稱 or Email */}
+							  <div className="flex gap-2 items-center mb-2">
+								<input
+								  type="text"
+								  value={memberInput}
+								  onChange={(e) => setMemberInput(e.target.value)}
+								  onKeyDown={(e) => {
+									if (e.key === 'Enter') {
+									  e.preventDefault();
+									  handleSubmitMemberInput();
+									}
+								  }}
+								  placeholder="輸入成員名稱或 Email（例如：小明 或 friend@example.com）"
+								  className="flex-grow border border-gray-300 rounded-lg p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
+								  disabled={isLoading || isReadOnly}
+								/>
+								<button
+								  onClick={handleSubmitMemberInput}
+								  className={
+									'flex-shrink-0 px-4 py-3 rounded-lg text-white font-semibold transition hover:scale-105 transform ' +
+									(memberInput.trim() === '' || isLoading || isReadOnly
+									  ? 'bg-gray-400 cursor-not-allowed'
+									  : 'bg-primaryColor-600 hover:bg-primaryColor-700')
+								  }
+								  disabled={memberInput.trim() === '' || isLoading || isReadOnly}
+								>
+								  加入
+								</button>
+							  </div>
+
+							  <p className="text-xs text-gray-500 mb-3">
+								沒有「@」視為一般分帳成員；含有「@」會以 Email 邀請對方，並加入可編輯成員。
+							  </p>
+
+							  {/* 目前有編輯權限的成員列表 */}
+							  <div className="mt-1 text-xs text-gray-600">
+								<p className="font-semibold mb-1">目前有編輯權限的成員：</p>
+
+								{groupMembers && groupMembers.length === 0 ? (
+								  <p className="text-gray-400">尚無成員（只有你自己）。</p>
+								) : (
+								  <div className="flex flex-wrap gap-2">
+									{groupMembers && groupMembers.map((uid) => (
+									  <div
+										key={uid}
+										className="flex items-center px-2 py-1 bg-white border border-gray-300 rounded-lg text-sm"
+									  >
+										<span>
+										  {getDisplayName(uid)}
+										  {uid === groupOwner && (
+											<span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
+											  （擁有者）
+											</span>
+										  )}
+										</span>
+
+										{!isReadOnly && uid !== groupOwner && (
+										  <button
+											type="button"
+											onClick={() => removeGroupMember(uid)}
+											className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
+										  >
+											移除
+										  </button>
+										)}
+									  </div>
+									))}
+								  </div>
+								)}
+							  </div>
+							</div>
 
                           {/* 現有成員列表 */}
                           <div>
@@ -2154,82 +2227,6 @@
                     </div>
                 )}
 				
-				{/* 邀請成員（以 Email 控制是否為成員，可編輯） */}
-				<div className="mt-4 p-4 bg-white rounded-xl border border-primaryColor-200 shadow-sm">
-				  <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
-					<Users className="w-4 h-4 mr-2" />
-					共享成員
-				  </h2>
-				  <div className="flex flex-col sm:flex-row gap-2">
-					<input
-					  type="email"
-					  placeholder="friend@example.com"
-					  value={inviteEmail}
-					  onChange={(e) => setInviteEmail(e.target.value)}
-					  onKeyDown={(e) => {
-						if (e.key === 'Enter') {
-						  e.preventDefault();
-						  if (!isReadOnly && !isLoading && inviteEmail.trim()) {
-							inviteUserByEmail(inviteEmail);
-						  }
-						}
-					  }}
-					  className="flex-1 border border-gray-300 rounded-lg p-3 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
-					  disabled={isReadOnly || isLoading}
-					/>
-					<button
-					  type="button"
-					  onClick={() => inviteUserByEmail(inviteEmail)}
-					  disabled={isReadOnly || isLoading || !inviteEmail.trim()}
-					  className={
-						"px-4 py-3 rounded-lg text-sm font-semibold text-white shadow-md transition transform hover:scale-[1.02] " +
-						((isReadOnly || isLoading || !inviteEmail.trim())
-						  ? "bg-gray-400 cursor-not-allowed"
-						  : "bg-primaryColor-600 hover:bg-primaryColor-700")
-					  }
-					>
-					  邀請加入
-					</button>
-				  </div>
-
-				<div className="mt-3 text-xs text-gray-600">
-				  <p className="font-semibold mb-1">目前有編輯權限的成員：</p>
-
-				  {groupMembers.length === 0 ? (
-					<p className="text-gray-400">尚無成員（只有你自己）。</p>
-				  ) : (
-					<div className="flex flex-wrap gap-2">
-					  {groupMembers.map((uid) => (
-						<div
-						  key={uid}
-						  className="flex items-center px-2 py-1 bg-gray-50 border border-gray-300 rounded-lg text-sm"
-						>
-						  <span>
-							{getDisplayName(uid)}
-							{uid === groupOwner && (
-							  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
-								（擁有者）
-							  </span>
-							)}
-						  </span>
-
-						  {/* 移除按鈕 */}
-						  {!isReadOnly && uid !== groupOwner && (
-							<button
-							  type="button"
-							  onClick={() => removeGroupMember(uid)}
-							  className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
-							>
-							  移除
-							</button>
-						  )}
-						</div>
-					  ))}
-					</div>
-				  )}
-				</div>
-				</div>
-
                 {/* 主要功能區塊 */}
                 <div className="mt-6 flex space-x-4">
                   <button
@@ -2310,6 +2307,12 @@
                     setError={setError}
                     getDisplayName={getDisplayName}
                     isReadOnly={isReadOnly}
+					inviteEmail={inviteEmail}
+					setInviteEmail={setInviteEmail}
+					groupMembers={groupMembers}
+					groupOwner={groupOwner}
+					inviteUserByEmail={inviteUserByEmail}
+					removeGroupMember={removeGroupMember}
                 />
                 
                 {/* 統一的確認提示 Modal */}
