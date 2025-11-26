@@ -500,7 +500,7 @@
         /**
          * 支出 Modal (核心邏輯獨立)
          */
-        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates, defaultCurrency }) => {
+        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates, defaultCurrency, currentUserLabel}) => {
             const [newExpense, setNewExpense] = useState({
                 description: '',
                 originalAmount: '',
@@ -537,18 +537,47 @@
                             payerName: expenseToEdit.payerName,
                             shares: initialShares,
                         });
-                    } else {
-                        setNewExpense({
-                            description: '',
-                            originalAmount: '',
-                            currency: defaultCurrency || DEFAULT_CURRENCY,
-                            payerName: currentUserId || members[0] || '',
-                            shares: getInitialShares(),
-                        });
-                    }
+					} else {
+					  // 決定預設的付款人：
+					  // 1. 如果 members 裡包含 currentUserId，優先用 currentUserId
+					  // 2. 否則，如果有成員顯示名稱 == currentUserLabel，就用那個成員
+					  // 3. 都沒有就 fallback 回原本的邏輯
+					  let defaultPayerId = null;
+
+					  if (currentUserId && members.includes(currentUserId)) {
+						defaultPayerId = currentUserId;
+					  }
+
+					  if (!defaultPayerId && currentUserLabel) {
+						for (const memberId of members) {
+						  try {
+							const label = getDisplayName(memberId);
+							if (label === currentUserLabel) {
+							  defaultPayerId = memberId;
+							  break;
+							}
+						  } catch (e) {
+							// getDisplayName 出錯就忽略
+						  }
+						}
+					  }
+
+					  if (!defaultPayerId) {
+						defaultPayerId = currentUserId || members[0] || '';
+					  }
+
+					  setNewExpense({
+						description: '',
+						originalAmount: '',
+						currency: defaultCurrency || DEFAULT_CURRENCY,
+						payerName: defaultPayerId,
+						shares: getInitialShares(),
+					  });
+					}
+
                     setModalError(null);
                 }
-            }, [state.isOpen, isEditing, expenseToEdit, members, currentUserId, getInitialShares]);
+            }, [state.isOpen, isEditing, expenseToEdit, members, currentUserId, getInitialShares, currentUserLabel, getDisplayName, defaultCurrency]);
 
             const handleInputChange = (e) => {
                 const { name, value } = e.target;
@@ -617,7 +646,7 @@
                         appId: appId,
                     };
 
-                    const collectionPath = `artifacts/${appId}/users/${collectionId}/expenses`;
+                    const collectionPath = getGroupExpensesPath(collectionId);
                     
                     if (isEditing) {
                         const docPath = `${collectionPath}/${expenseToEdit.id}`;
@@ -1056,14 +1085,37 @@
 		  const [defaultCurrency, setDefaultCurrency] = useState(DEFAULT_CURRENCY);
 		  const [detectedCountry, setDetectedCountry] = useState(null);
           
-          const [currentCollectionId, setCurrentCollectionId] = useState(null); // 當前正在檢視的紀錄簿 ID (預設為 userId)
-          const isReadOnly = userId !== currentCollectionId;
+          const [currentCollectionId, setCurrentCollectionId] = useState(null); // 目前正在檢視的 groupId
+		  const [groupOwner, setGroupOwner] = useState(null);                   // 群組擁有者 uid
+		  const [groupMembers, setGroupMembers] = useState([]);                 // 群組成員 uid 清單
 
+		  // 只要目前登入者不在 groupMembers 裡，就視為唯讀
+		  const isReadOnly = !groupMembers.includes(userId);
+		
+		  const [inviteEmail, setInviteEmail] = useState(''); // 用來輸入要邀請的 email
+		
           const [expenses, setExpenses] = useState([]);
           const [customMembers, setCustomMembers] = useState([]); 
           const [defaultSharesConfig, setDefaultSharesConfig] = useState({}); 
           const [members, setMembers] = useState([]); 
           
+		  const ensureDefaultGroup = React.useCallback(async (_db, uid) => {
+		    if (!_db || !uid) return null;
+
+		    const groupId = uid; // 先用 uid 當 groupId
+		    const groupRef = _db.doc(`artifacts/${appId}/groups/${groupId}`);
+		    const snap = await groupRef.get();
+
+		    if (!snap.exists) {
+			  await groupRef.set({
+			    owner: uid,
+			    members: [uid],
+			    createdAt: serverTimestamp(),
+			  });
+		    }
+		    return groupId;
+		  }, []);
+				  
           const [expenseModalState, setExpenseModalState] = useState({
               isOpen: false,
               editingExpense: null,
@@ -1084,48 +1136,153 @@
           const [error, setError] = useState(null);
           
           // --- 1. Firebase 初始化與驗證 ---
-          useEffect(() => {
-            if (!firebaseConfig) {
-              setError('Firebase configuration is missing.');
-              setAuthReady(true); 
-              return;
-            }
+		useEffect(() => {
+		  if (!firebaseConfig) {
+			setError('Firebase configuration is missing.');
+			setAuthReady(true); 
+			return;
+		  }
 
-            try {
-              const app = firebase.initializeApp(firebaseConfig);
-              const _auth = app.auth();
-              const _db = app.firestore();
+		  try {
+			const app = firebase.initializeApp(firebaseConfig);
+			const _auth = app.auth();
+			const _db = app.firestore();
 
-              setDb(_db);
-              setAuth(_auth);
+			setDb(_db);
+			setAuth(_auth);
 
-              const unsubscribe = _auth.onAuthStateChanged((user) => {
-                if (user) {
-                    setUserId(user.uid);
-                    
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const shareId = urlParams.get('shareId');
+			const unsubscribe = _auth.onAuthStateChanged((user) => {
+			  if (user) {
+				// 用 IIFE 包 async，避免直接把 callback 宣告成 async
+				(async () => {
+				  try {
+					setUserId(user.uid);
 
-                    if (shareId) {
-                        setCurrentCollectionId(shareId);
-                        history.replaceState(null, null, window.location.pathname);
-                    } else {
-                        setCurrentCollectionId(prev => prev || user.uid); 
-                    }
-                    
-                } else {
-                    setUserId(null);
-                    setCurrentCollectionId(null);
-                }
-                setAuthReady(true);
-              });
-              
-              return () => unsubscribe();
-            } catch (e) {
-              setError(`Firebase initialization failed: ${e.message}`);
-              setAuthReady(true);
-            }
-          }, []);
+					const urlParams = new URLSearchParams(window.location.search);
+					const shareId = urlParams.get('shareId');
+
+					let targetGroupId;
+
+					if (shareId) {
+					  // 若有 shareId，代表是被分享的 group
+					  targetGroupId = shareId;
+					  history.replaceState(null, null, window.location.pathname);
+					} else {
+					  // 否則就確保自己的預設群組存在
+					  targetGroupId = await ensureDefaultGroup(_db, user.uid);
+					}
+
+					setCurrentCollectionId(targetGroupId);
+				  } catch (err) {
+					console.error("onAuthStateChanged async error:", err);
+					setError(`Auth state error: ${err.message}`);
+				  } finally {
+					setAuthReady(true);
+				  }
+				})();
+			  } else {
+				setUserId(null);
+				setCurrentCollectionId(null);
+				setAuthReady(true);
+			  }
+			});
+			
+			return () => unsubscribe();
+		  } catch (e) {
+			setError(`Firebase initialization failed: ${e.message}`);
+			setAuthReady(true);
+		  }
+		}, [ensureDefaultGroup]);
+
+		// 透過 email 邀請使用者加入這個群組（有編輯權）
+		const inviteUserByEmail = React.useCallback(
+		  async (emailToInviteRaw) => {
+			if (!db || !currentCollectionId) return;
+			const emailToInvite = (emailToInviteRaw || '').trim().toLowerCase();
+			if (!emailToInvite) return;
+
+			setIsLoading(true);
+			setError(null);
+
+			try {
+			  // 先從 public_profiles 找出這個 email 對應的 uid
+			  const profilesRef = db.collection(`artifacts/${appId}/public_profiles`);
+			  const snap = await profilesRef.where('email', '==', emailToInvite).get();
+
+			  if (snap.empty) {
+				setError('找不到使用這個 email 註冊的帳號，請對方先在這個系統登入一次。');
+				return;
+			  }
+
+			  const profileData = snap.docs[0].data();
+			  const invitedUid = profileData.uid;
+
+			  if (!invitedUid) {
+				setError('這個 email 的使用者資料異常，請稍後再試。');
+				return;
+			  }
+
+			  // 把這個 uid 加進 group 的 members 陣列
+			  const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
+			  await groupRef.update({
+				members: firebase.firestore.FieldValue.arrayUnion(invitedUid),
+			  });
+
+			  // 清空輸入框
+			  setInviteEmail('');
+			} catch (e) {
+			  console.error('inviteUserByEmail error:', e);
+			  setError(`邀請成員失敗: ${e.message}`);
+			} finally {
+			  setIsLoading(false);
+			}
+		  },
+		  [db, currentCollectionId]
+		);
+
+
+		// --- 監聽目前 group 的 owner / members ---
+		useEffect(() => {
+		  if (!db || !currentCollectionId) return;
+
+		  const groupDocRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
+
+		  const unsub = groupDocRef.onSnapshot(
+			(snap) => {
+			  if (snap.exists) {
+				const data = snap.data();
+				const owner = data.owner || null;
+				const members = Array.isArray(data.members) ? data.members : [];
+
+				// owner 也確保在 members 裡（避免 owner 不見）
+				const mergedMembers = members.includes(owner)
+				  ? members
+				  : [...members, owner].filter(Boolean);
+
+				setGroupOwner(owner);
+				setGroupMembers(mergedMembers);
+			  } else {
+				console.warn("Group doc not found:", currentCollectionId);
+				setGroupOwner(null);
+				setGroupMembers([]);
+			  }
+			},
+			(err) => {
+			  console.error("Error listening group doc:", err);
+			  setGroupOwner(null);
+			  setGroupMembers([]);
+			}
+		  );
+
+		  return () => unsub();
+		}, [db, currentCollectionId]);
+
+		// --- Firestore 路徑 helper ---
+		const getGroupExpensesPath = (groupId) =>
+		  `artifacts/${appId}/groups/${groupId}/expenses`;
+
+		const getGroupMembersDocPath = (groupId) =>
+		  `artifacts/${appId}/groups/${groupId}/settings/members`;
 
           // --- 2. 獲取所有公共暱稱 ---
           useEffect(() => {
@@ -1176,8 +1333,8 @@
           useEffect(() => {
             if (!authReady || !db || !currentCollectionId) return; 
 
-            const expensesCollectionPath = `artifacts/${appId}/users/${currentCollectionId}/expenses`;
-            const expensesRef = db.collection(expensesCollectionPath);
+            const expensesCollectionPath = getGroupExpensesPath(currentCollectionId);
+			const expensesRef = db.collection(expensesCollectionPath);
 
             const unsubscribeExpenses = expensesRef.onSnapshot((snapshot) => {
               const fetchedExpenses = snapshot.docs.map(docSnap => {
@@ -1211,8 +1368,8 @@
               setExpenses([]);
             });
 
-            const membersDocPath = `artifacts/${appId}/users/${currentCollectionId}/settings/members`;
-            const membersDocRef = db.doc(membersDocPath);
+            const membersDocPath = getGroupMembersDocPath(currentCollectionId);
+			const membersDocRef = db.doc(membersDocPath);
 
             const unsubscribeMembers = membersDocRef.onSnapshot((docSnap) => {
                 if (docSnap.exists) {
@@ -1320,7 +1477,7 @@
                 setIsLoading(true);
                 setError(null);
                 try {
-                    const docPath = `artifacts/${appId}/users/${currentCollectionId}/expenses/${id}`;
+                    const docPath = `${getGroupExpensesPath(currentCollectionId)}/${id}`;
                     await db.doc(docPath).delete();
                 } catch (e) {
                     console.error("Error deleting document: ", e);
@@ -1345,7 +1502,7 @@
                   setIsLoading(true);
                   setError(null);
                   try {
-                      const expensesCollectionPath = `artifacts/${appId}/users/${currentCollectionId}/expenses`;
+                      const expensesCollectionPath = getGroupExpensesPath(currentCollectionId);
                       const snapshot = await db.collection(expensesCollectionPath).get();
 
                       const batch = db.batch();
@@ -1376,7 +1533,7 @@
             setIsLoading(true);
             setError(null);
             try {
-                const docPath = `artifacts/${appId}/users/${currentCollectionId}/settings/members`;
+                const docPath = getGroupMembersDocPath(currentCollectionId);
                 const membersDocRef = db.doc(docPath);
 
                 const sanitizedList = Array.from(new Set(
@@ -1424,7 +1581,7 @@
             setIsLoading(true);
             setError(null);
             try {
-                const docPath = `artifacts/${appId}/users/${currentCollectionId}/settings/members`;
+                const docPath = getGroupMembersDocPath(currentCollectionId);
                 const membersDocRef = db.doc(docPath);
 
                 const sharesToSave = {};
@@ -1463,7 +1620,7 @@
                   setIsLoading(true);
                   setError(null);
                   try {
-                      const collectionPath = `artifacts/${appId}/users/${currentCollectionId}/expenses`;
+                      const collectionPath = getGroupExpensesPath(currentCollectionId);
                       
                       // 使用新欄位格式：originalAmount / currency / amountInTWD
                       await db.collection(collectionPath).add({
@@ -1608,6 +1765,7 @@
           };
 
           // --- 渲染 ---
+		  const currentUserLabel = userId ? getDisplayName(userId) : '';
           if (!authReady) {
             return (
                 <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1655,6 +1813,74 @@
                     logout={logout}
                     userProfiles={userProfiles}
                 />
+				
+				{/* 邀請成員（以 Email 控制是否為成員，可編輯） */}
+				<div className="mt-4 p-4 bg-white rounded-xl border border-primaryColor-200 shadow-sm">
+				  <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+					<Users className="w-4 h-4 mr-2" />
+					共享成員（可編輯這本記帳簿）
+				  </h2>
+				  <p className="text-xs text-gray-500 mb-3">
+					輸入對方「在此系統登入用的 Email」，將他加入這本記帳簿的成員。只有成員可以新增 / 編輯 / 刪除支出。
+				  </p>
+
+				  <div className="flex flex-col sm:flex-row gap-2">
+					<input
+					  type="email"
+					  placeholder="friend@example.com"
+					  value={inviteEmail}
+					  onChange={(e) => setInviteEmail(e.target.value)}
+					  onKeyDown={(e) => {
+						if (e.key === 'Enter') {
+						  e.preventDefault();
+						  if (!isReadOnly && !isLoading && inviteEmail.trim()) {
+							inviteUserByEmail(inviteEmail);
+						  }
+						}
+					  }}
+					  className="flex-1 border border-gray-300 rounded-lg p-3 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
+					  disabled={isReadOnly || isLoading}
+					/>
+					<button
+					  type="button"
+					  onClick={() => inviteUserByEmail(inviteEmail)}
+					  disabled={isReadOnly || isLoading || !inviteEmail.trim()}
+					  className={
+						"px-4 py-3 rounded-lg text-sm font-semibold text-white shadow-md transition transform hover:scale-[1.02] " +
+						((isReadOnly || isLoading || !inviteEmail.trim())
+						  ? "bg-gray-400 cursor-not-allowed"
+						  : "bg-primaryColor-600 hover:bg-primaryColor-700")
+					  }
+					>
+					  邀請加入
+					</button>
+				  </div>
+
+				  <div className="mt-3 text-xs text-gray-600">
+					<p className="font-semibold mb-1">目前有編輯權限的成員（依照登入 Email 對應的帳號）：</p>
+					{groupMembers.length === 0 ? (
+					  <p className="text-gray-400">尚無成員（只有你自己）。</p>
+					) : (
+					  <ul className="list-disc list-inside space-y-1">
+						{groupMembers.map((uid) => (
+						  <li key={uid}>
+							{getDisplayName(uid)}
+							{uid === groupOwner && (
+							  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
+								（擁有者）
+							  </span>
+							)}
+							{uid === userId && (
+							  <span className="ml-1 text-[11px] text-green-600 font-semibold">
+								（你）
+							  </span>
+							)}
+						  </li>
+						))}
+					  </ul>
+					)}
+				  </div>
+				</div>
 
                 {/* 主要功能區塊 */}
                 <div className="mt-6 flex space-x-4">
@@ -1718,6 +1944,7 @@
                     collectionId={currentCollectionId}
                     liveExchangeRates={liveExchangeRates}
 					defaultCurrency={defaultCurrency}
+					currentUserLabel={currentUserLabel}
                 />
                 <MemberManagementModal 
                     db={db}
