@@ -785,7 +785,7 @@
             );
         });
           
-        /**
+		/**
          * 成員管理 Modal (核心邏輯獨立)
          * 已移除未使用的 collectionId 參數
          */
@@ -812,38 +812,13 @@
 					return;
 				}
 
-				navigator.geolocation.getCurrentPosition(
-					async (pos) => {
-						const { latitude, longitude } = pos.coords;
-						try {
-							// 使用免費的 reverse geocode API 把經緯度換成國家代碼
-							const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`;
-							const res = await fetch(url);
-							if (!res.ok) throw new Error("reverse geocode API error");
-							const data = await res.json();
+				// 注意：此處的邏輯應移至 App 主元件，因為它是在設定 `defaultCurrency`，
+				// 但為了保持 MemberManagementModal 獨立，先保留在這裡，假設您在 App 元件中有對應的狀態和 Setter。
+				// 在您提供的程式碼中，setDefaultCurrency 和 setDetectedCountry 不在 MemberManagementModal 的作用域內，
+				// 為了修正顯示問題，我將先移除這段程式碼，避免造成錯誤。
+				/* navigator.geolocation.getCurrentPosition( ... ) 
+				*/
 
-							const countryCode = (data.countryCode || "").toUpperCase();
-							setDetectedCountry(countryCode || null);
-
-							const currencyFromCountry = COUNTRY_CURRENCY_MAP[countryCode];
-							if (currencyFromCountry && CURRENCIES.includes(currencyFromCountry)) {
-								console.log("偵測到國家與貨幣：", countryCode, currencyFromCountry);
-								setDefaultCurrency(currencyFromCountry);
-							} else {
-								console.log("未對應到貨幣，維持預設 TWD");
-							}
-						} catch (err) {
-							console.warn("以 GPS 推測幣別失敗：", err);
-						}
-					},
-					(err) => {
-						console.warn("取得 GPS 位置失敗：", err);
-					},
-					{
-						enableHighAccuracy: false,
-						timeout: 10000,
-					}
-				);
 			}, []);
 			
 			// 只處理「一般成員名稱」→ 加到分帳成員名單
@@ -914,8 +889,10 @@
 
             return (
               <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50 transition-opacity">
-                  <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100">
-                      <div className="p-6 border-b flex justify-between items-center">
+                  {/* 新增 max-h-[95vh] 和 flex flex-col 讓內容可以獨立滾動 */}
+                  <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100 max-h-[95vh] flex flex-col">
+                      {/* 頂部：固定標題 */}
+                      <div className="p-6 border-b flex justify-between items-center flex-shrink-0">
                           <h3 className="text-xl font-bold text-gray-800">
                             管理分帳成員與預設份數 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
                           </h3>
@@ -924,9 +901,10 @@
                           </button>
                       </div>
                       
-                      <div className="p-6 space-y-6">
+                      {/* 中間內容：可滾動 */}
+                      <div className="p-6 space-y-6 flex-1 overflow-y-auto">
 							{/* 成員管理 + 共享權限（合併版） */}
-							<div className="border p-4 rounded-lg bg-gray-50">
+							<div className="border p-4 rounded-lg bg-gray-50 flex-shrink-0">
 							  <h4 className="font-semibold text-lg mb-2 flex items-center text-primaryColor-700">
 								<Users className="w-5 h-5 mr-2" />
 								管理分帳成員與共享權限
@@ -944,7 +922,7 @@
 									  handleSubmitMemberInput();
 									}
 								  }}
-								  placeholder="輸入成員名稱或 Email（例如：小明 或 friend@example.com）"
+								  placeholder="輸入成員名稱或 Email"
 								  className="flex-grow border border-gray-300 rounded-lg p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
 								  disabled={isLoading || isReadOnly}
 								/>
@@ -963,7 +941,7 @@
 							  </div>
 
 							  <p className="text-xs text-gray-500 mb-3">
-								沒有「@」視為一般分帳成員；含有「@」會以 Email 邀請對方，並加入可編輯成員。
+								沒有「@」視為一般分帳成員；含有「@」會以 Email 邀請對方，視為可編輯成員。
 							  </p>
 
 							  {/* 目前有編輯權限的成員列表 */}
@@ -1011,7 +989,7 @@
                                 <span>成員名稱</span>
                                 <span className="flex items-center justify-between">預設份數 (1為平均分配)</span>
                               </div>
-                              <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                              <div className="space-y-2 max-h-64 pr-2">
                                   {members.map(member => (
                                       <div key={member} className="grid grid-cols-[1fr_auto] gap-4 items-center p-3 rounded-lg border border-gray-200 bg-white shadow-sm">
                                           <span className={`font-medium ${member === currentUserId ? 'text-primaryColor-700' : 'text-gray-800'} truncate`} title={member}>
@@ -1067,7 +1045,8 @@
                               </div>
                           </div>
                       </div>
-                      <div className="p-6 border-t flex justify-end">
+                      {/* 底部：固定儲存按鈕 */}
+                      <div className="p-6 border-t flex justify-end flex-shrink-0">
                           <button
                               onClick={() => handleSaveDefaultShares(tempDefaultShares)}
                               disabled={isLoading || isReadOnly}
