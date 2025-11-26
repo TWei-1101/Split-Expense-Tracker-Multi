@@ -1198,53 +1198,6 @@
 		  }
 		}, [ensureDefaultGroup]);
 
-		// 透過 email 邀請使用者加入這個群組（有編輯權）
-		const inviteUserByEmail = React.useCallback(
-		  async (emailToInviteRaw) => {
-			if (!db || !currentCollectionId) return;
-			const emailToInvite = (emailToInviteRaw || '').trim().toLowerCase();
-			if (!emailToInvite) return;
-
-			setIsLoading(true);
-			setError(null);
-
-			try {
-			  // 先從 public_profiles 找出這個 email 對應的 uid
-			  const profilesRef = db.collection(`artifacts/${appId}/public_profiles`);
-			  const snap = await profilesRef.where('email', '==', emailToInvite).get();
-
-			  if (snap.empty) {
-				setError('找不到使用這個 email 註冊的帳號，請對方先在這個系統登入一次。');
-				return;
-			  }
-
-			  const profileData = snap.docs[0].data();
-			  const invitedUid = profileData.uid;
-
-			  if (!invitedUid) {
-				setError('這個 email 的使用者資料異常，請稍後再試。');
-				return;
-			  }
-
-			  // 把這個 uid 加進 group 的 members 陣列
-			  const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
-			  await groupRef.update({
-				members: firebase.firestore.FieldValue.arrayUnion(invitedUid),
-			  });
-
-			  // 清空輸入框
-			  setInviteEmail('');
-			} catch (e) {
-			  console.error('inviteUserByEmail error:', e);
-			  setError(`邀請成員失敗: ${e.message}`);
-			} finally {
-			  setIsLoading(false);
-			}
-		  },
-		  [db, currentCollectionId]
-		);
-
-
 		// --- 監聽目前 group 的 owner / members ---
 		useEffect(() => {
 		  if (!db || !currentCollectionId) return;
@@ -1447,17 +1400,17 @@
           }, [authReady, db, currentCollectionId]);
 
           // --- 5. 衍生成員清單 ---
-          useEffect(() => {
-            let currentMembers = [currentCollectionId].filter(Boolean); 
-            
-            customMembers.forEach(name => {
-                if (name !== currentCollectionId && !currentMembers.includes(name)) {
-                    currentMembers.push(name);
-                }
-            });
+			useEffect(() => {
+			  let currentMembers = [currentCollectionId].filter(Boolean); 
+			  
+			  customMembers.forEach(name => {
+				if (name !== currentCollectionId && !currentMembers.includes(name)) {
+				  currentMembers.push(name);
+				}
+			  });
 
-            setMembers(currentMembers.sort());
-          }, [currentCollectionId, customMembers]);
+			  setMembers(currentMembers);
+			}, [currentCollectionId, customMembers]);
 
           const getInitialShares = useCallback(() => {
             return members.reduce((acc, name) => {
@@ -1609,6 +1562,66 @@
                 setIsLoading(false);
             }
           }, [db, currentCollectionId, isReadOnly, members, defaultSharesConfig]);
+
+			// 透過 email 邀請使用者加入這個群組（有編輯權）
+			// 並且自動把成員加入「管理分帳成員與預設份數」的名單
+			const inviteUserByEmail = React.useCallback(
+			  async (emailToInviteRaw) => {
+				if (!db || !currentCollectionId) return;
+				const emailToInvite = (emailToInviteRaw || '').trim().toLowerCase();
+				if (!emailToInvite) return;
+
+				setIsLoading(true);
+				setError(null);
+
+				try {
+				  // 1) 先從 public_profiles 找出這個 email 對應的 uid / 暱稱
+				  const profilesRef = db.collection(`artifacts/${appId}/public_profiles`);
+				  const snap = await profilesRef.where('email', '==', emailToInvite).get();
+
+				  if (snap.empty) {
+					setError('找不到使用這個 Email 註冊的帳號，請對方先在這個系統登入一次。');
+					return;
+				  }
+
+				  const profileData = snap.docs[0].data();
+				  const invitedUid = profileData.uid;
+				  const invitedDisplayName =
+					profileData.displayName || profileData.nickname || emailToInvite;
+
+				  if (!invitedUid) {
+					setError('這個 Email 的使用者資料異常，請稍後再試。');
+					return;
+				  }
+
+				  // 2) 把這個 uid 加進 group.members（權限控制）
+				  const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
+				  await groupRef.update({
+					members: firebase.firestore.FieldValue.arrayUnion(invitedUid),
+				  });
+
+				  // 3) 把他也加入「分帳成員名單」(settings/members.list)
+				  //    這裡用 uid 當成員 ID，顯示時會透過 getDisplayName 顯示暱稱
+				  let newMemberList = customMembers;
+				  if (!customMembers.includes(invitedUid)) {
+					newMemberList = [...customMembers, invitedUid];
+					await saveMembers(newMemberList);
+				  }
+
+				  // 4) 清空輸入框 & 給一點提示用戶
+				  setInviteEmail('');
+				  console.log(
+					`已邀請成員 ${invitedDisplayName} (${invitedUid}) 並加入分帳成員名單`
+				  );
+				} catch (e) {
+				  console.error('inviteUserByEmail error:', e);
+				  setError(`邀請成員失敗: ${e.message}`);
+				} finally {
+				  setIsLoading(false);
+				}
+			  },
+			  [db, currentCollectionId, customMembers, saveMembers]
+			);
 
           const handleDeleteMember = useCallback(async (nameToDelete) => {
             if (isReadOnly) return;
@@ -1855,7 +1868,7 @@
 								  cancelEditGroupName();
 								}
 							  }}
-							  className="w-full border-b border-primaryColor-500 bg-transparent text-3xl sm:text-4xl font-extrabold text-primaryColor-700 focus:outline-none focus:border-primaryColor-700"
+							  className="w-full border-b border-primaryColor-500 bg-transparent text-2xl sm:text-3xl font-extrabold text-primaryColor-700 focus:outline-none focus:border-primaryColor-700"
 							  autoFocus
 							  maxLength={40}
 							  placeholder="輸入這本分帳記帳簿名稱"
@@ -1890,7 +1903,7 @@
 						  <div className="flex flex-col">
 							<h1
 							  className={
-								"text-4xl sm:text-4xl font-extrabold text-primaryColor-700 " +
+								"text-3xl sm:text-4xl font-extrabold text-primaryColor-700 " +
 								(isReadOnly ? "" : "cursor-text hover:underline decoration-dotted")
 							  }
 							  onClick={() => {
