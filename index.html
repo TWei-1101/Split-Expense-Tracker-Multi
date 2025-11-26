@@ -2140,7 +2140,7 @@
 						  title="生成並複製這本記帳簿的分享連結"
 					    >
 						  <Share2 className="w-4 h-4 mr-1" />
-						  分享這本記帳簿
+						  點擊複製連結
 					    </button>
 					</div>
 				  </div>
@@ -2192,38 +2192,42 @@
 					</button>
 				  </div>
 
-				  <div className="mt-3 text-xs text-gray-600">
-					<p className="font-semibold mb-1">目前有編輯權限的成員：</p>
-					{groupMembers.length === 0 ? (
-					  <p className="text-gray-400">尚無成員（只有你自己）。</p>
-					) : (
-						<ul className="space-y-1">
-						  {groupMembers.map((uid) => (
-							<li key={uid} className="flex items-center justify-between">
-							  <div className="text-sm">
-								{getDisplayName(uid)}
-								{uid === groupOwner && (
-								  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
-									（擁有者）
-								  </span>
-								)}
-							  </div>
+				<div className="mt-3 text-xs text-gray-600">
+				  <p className="font-semibold mb-1">目前有編輯權限的成員：</p>
 
-							  {/* 只有成員、且不是 owner 時，才顯示移除按鈕 */}
-							  {!isReadOnly && uid !== groupOwner && (
-								<button
-								  type="button"
-								  onClick={() => removeGroupMember(uid)}
-								  className="ml-2 px-2 py-1 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
-								>
-								  移除
-								</button>
-							  )}
-							</li>
-						  ))}
-						</ul>
-					)}
-				  </div>
+				  {groupMembers.length === 0 ? (
+					<p className="text-gray-400">尚無成員（只有你自己）。</p>
+				  ) : (
+					<div className="flex flex-wrap gap-2">
+					  {groupMembers.map((uid) => (
+						<div
+						  key={uid}
+						  className="flex items-center px-2 py-1 bg-gray-50 border border-gray-300 rounded-lg text-sm"
+						>
+						  <span>
+							{getDisplayName(uid)}
+							{uid === groupOwner && (
+							  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
+								（擁有者）
+							  </span>
+							)}
+						  </span>
+
+						  {/* 移除按鈕 */}
+						  {!isReadOnly && uid !== groupOwner && (
+							<button
+							  type="button"
+							  onClick={() => removeGroupMember(uid)}
+							  className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
+							>
+							  移除
+							</button>
+						  )}
+						</div>
+					  ))}
+					</div>
+				  )}
+				</div>
 				</div>
 
                 {/* 主要功能區塊 */}
