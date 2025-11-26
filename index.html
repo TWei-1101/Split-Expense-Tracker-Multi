@@ -1407,19 +1407,28 @@
 			});
 		  }, []);
 
-          // 登出
-          const logout = useCallback(async () => {
-            if (auth) {
-                try {
-                    await auth.signOut();
-                    setExpenses([]);
-                    setCustomMembers([]);
-                    setDefaultSharesConfig({});
-                } catch (e) {
-                    setError(`登出失敗: ${e.message}`);
-                }
-            }
-          }, [auth]);
+            // 登出
+			const logout = useCallback(async () => {
+			  // 先跳出確認視窗
+			  const confirmed = window.confirm('確定要登出嗎？');
+
+			  // 如果使用者按「取消」，就不做任何事
+			  if (!confirmed) {
+				return;
+			  }
+
+			  // 使用者按「確定」才真的登出
+			  if (auth) {
+				try {
+				  await auth.signOut();
+				  setExpenses([]);
+				  setCustomMembers([]);
+				  setDefaultSharesConfig({});
+				} catch (e) {
+				  setError(`登出失敗: ${e.message}`);
+				}
+			  }
+			}, [auth]);
 
           // --- 4. 數據獲取 (Firestore 監聽) ---
           useEffect(() => {
@@ -2119,10 +2128,6 @@
 
 					{/* 右上角：登出 / 返回自己的記帳簿 */}
 					<div className="flex flex-col items-end gap-1">
-					  <p className="text-xs text-gray-500">
-						目前登入：<span className="font-semibold text-gray-700">{currentUserLabel}</span>
-					  </p>
-
 					  {isViewingOwn ? (
 						<button
 						  onClick={logout}
