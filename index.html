@@ -441,346 +441,269 @@
             );
         });
         
-        /**
-         * 支出 Modal (核心邏輯獨立)
+		/**
+         * 成員管理 Modal (核心邏輯獨立)
+         * 已移除未使用的 collectionId 參數
          */
-        const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates, defaultCurrency, currentUserLabel}) => {
-            const [newExpense, setNewExpense] = useState({
-                description: '',
-                originalAmount: '',
-                currency: defaultCurrency || DEFAULT_CURRENCY,
-                payerName: currentUserId || '',
-                shares: {}, 
-            });
-            const [isLoadingModal, setIsLoadingModal] = useState(false);
-            const [modalError, setModalError] = useState(null);
-
-            const isEditing = state.isEditing;
-            const expenseToEdit = state.editingExpense;
-            const modalTitle = isEditing ? '編輯支出記錄' : '新增支出記錄';
-            const submitText = isEditing ? '儲存修改' : '確認新增支出';
-            
-            const currentExchangeRate = liveExchangeRates[newExpense.currency] || DEFAULT_EXCHANGE_RATES[newExpense.currency] || 1.0;
-            const amountInTWD = useMemo(() => {
-                const amount = parseFloat(newExpense.originalAmount) || 0;
-                return Math.round(amount * currentExchangeRate);
-            }, [newExpense.originalAmount, currentExchangeRate]);
-
+        const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly, groupMembers, groupOwner, inviteUserByEmail, removeGroupMember }) => {
+            const [memberInput, setMemberInput] = useState('');
+            const [tempDefaultShares, setTempDefaultShares] = useState({});
 
             useEffect(() => {
-                if (state.isOpen) {
-                    if (isEditing && expenseToEdit) {
-                        const initialShares = members.reduce((acc, name) => ({ 
-                            ...acc, 
-                            [name]: expenseToEdit.shares[name] !== undefined ? expenseToEdit.shares[name] : 0 
-                        }), {});
-                        setNewExpense({
-                            description: expenseToEdit.description,
-                            originalAmount: expenseToEdit.originalAmount,
-                            currency: expenseToEdit.currency || DEFAULT_CURRENCY,
-                            payerName: expenseToEdit.payerName,
-                            shares: initialShares,
-                        });
-					} else {
-					  // 決定預設的付款人：
-					  // 1. 如果 members 裡包含 currentUserId，優先用 currentUserId
-					  // 2. 否則，如果有成員顯示名稱 == currentUserLabel，就用那個成員
-					  // 3. 都沒有就 fallback 回原本的邏輯
-					  let defaultPayerId = null;
-
-					  if (currentUserId && members.includes(currentUserId)) {
-						defaultPayerId = currentUserId;
-					  }
-
-					  if (!defaultPayerId && currentUserLabel) {
-						for (const memberId of members) {
-						  try {
-							const label = getDisplayName(memberId);
-							if (label === currentUserLabel) {
-							  defaultPayerId = memberId;
-							  break;
-							}
-						  } catch (e) {
-							// getDisplayName 出錯就忽略
-						  }
-						}
-					  }
-
-					  if (!defaultPayerId) {
-						defaultPayerId = currentUserId || members[0] || '';
-					  }
-
-					  setNewExpense({
-						description: '',
-						originalAmount: '',
-						currency: defaultCurrency || DEFAULT_CURRENCY,
-						payerName: defaultPayerId,
-						shares: getInitialShares(),
-					  });
-					}
-
-                    setModalError(null);
+                if (isMemberModalOpen) {
+                    const initialShares = members.reduce((acc, name) => {
+                        const shareValue = defaultSharesConfig[name] !== undefined ? defaultSharesConfig[name] : 1;
+                        acc[name] = shareValue;
+                        return acc;
+                    }, {});
+                    setTempDefaultShares(initialShares);
+                    setMemberInput('');
                 }
-            }, [state.isOpen, isEditing, expenseToEdit, members, currentUserId, getInitialShares, currentUserLabel, getDisplayName, defaultCurrency]);
+            }, [isMemberModalOpen, members, defaultSharesConfig]);
+            
+			
+			// 只處理「一般成員名稱」→ 加到分帳成員名單
+			const handleAddMemberByName = async (name) => {
+			  if (isReadOnly) return setError('唯讀模式下無法新增成員。');
 
-            const handleInputChange = (e) => {
-                const { name, value } = e.target;
-                setNewExpense(prev => ({
-                    ...prev,
-                    [name]: name === 'originalAmount' ? (value === '' ? '' : parseFloat(value) || '') : value,
-                }));
-            };
+			  const trimmedName = name.trim();
+			  if (
+				trimmedName &&
+				trimmedName !== currentUserId &&
+				!customMembers.includes(trimmedName)
+			  ) {
+				const newMemberList = [...customMembers, trimmedName];
+				await saveMembers(newMemberList);
+			  } else if (trimmedName === currentUserId) {
+				setError('不能將自己的用戶 ID 新增為成員。');
+			  }
+			};
 
-            const handleCurrencyChange = (e) => {
-                 setNewExpense(prev => ({
-                    ...prev,
-                    currency: e.target.value,
-                 }));
-            };
+			// 共用：判斷是名稱還是 Email
+			const handleSubmitMemberInput = async () => {
+			  if (isReadOnly) {
+				setError('唯讀模式下無法新增或邀請成員。');
+				return;
+			  }
 
-            const handleShareChange = (name, delta) => {
-                setNewExpense(prev => {
-                    const currentShares = prev.shares[name] || 0;
+			  const input = memberInput.trim();
+			  if (!input) return;
+
+			  if (input.includes('@')) {
+				// Email → 邀請共享成員
+				await inviteUserByEmail(input);
+			  } else {
+				// 一般成員名稱
+				await handleAddMemberByName(input);
+			  }
+
+			  setMemberInput('');
+			};
+            
+            const handleTempShareChange = (name, delta) => {
+                setTempDefaultShares(prev => {
+                    const currentShares = prev[name] || 0;
                     const newShares = Math.max(0, currentShares + delta);
                     return {
                         ...prev,
-                        shares: {
-                            ...prev.shares,
-                            [name]: newShares,
-                        },
+                        [name]: newShares,
                     };
                 });
             };
-
-            const setToAverageSplit = () => {
-                const averageShares = members.reduce((acc, name) => ({ ...acc, [name]: 1 }), {});
-                setNewExpense(prev => ({
-                    ...prev,
-                    shares: averageShares,
-                }));
-            };
-
-            const saveExpense = async () => {
-                if (isReadOnly) {
-                    setModalError('您正在瀏覽共享紀錄簿，無法進行修改。請切換回您的私有紀錄簿。');
-                    return;
-                }
-                if (!db || !currentUserId) return;
-
-                if (!newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName) {
-                    setModalError('請輸入有效的品項、金額和付款人！');
-                    return;
-                }
-
-                setIsLoadingModal(true);
-                setModalError(null);
-                try {
-                    const expenseToSave = {
-                        description: newExpense.description,
-                        originalAmount: newExpense.originalAmount,
-                        currency: newExpense.currency,
-                        exchangeRate: currentExchangeRate,
-                        amountInTWD: amountInTWD,
-                        payerName: newExpense.payerName,
-                        shares: Object.entries(newExpense.shares).reduce((acc, [name, share]) => {
-                            if (share > 0) acc[name] = share;
-                            return acc;
-                        }, {}),
-                        ...(isEditing ? {} : { timestamp: serverTimestamp(), creatorId: currentUserId }),
-                        appId: appId,
-                    };
-
-                    const collectionPath = getGroupExpensesPath(collectionId);
-                    
-                    if (isEditing) {
-                        const docPath = `${collectionPath}/${expenseToEdit.id}`;
-                        await db.doc(docPath).update(expenseToSave);
-                    } else {
-                        await db.collection(collectionPath).add(expenseToSave);
-                    }
-
-                    onClose();
-                } catch (e) {
-                    console.error("Error saving document: ", e);
-                    setModalError(`儲存支出失敗: ${e.message}`);
-                } finally {
-                    setIsLoadingModal(false);
+            
+            const handleTempInputChange = (name, value) => {
+                const shareCount = parseInt(value, 10);
+                if (shareCount >= 0 || value === '') {
+                    setTempDefaultShares(prev => ({
+                        ...prev,
+                        [name]: shareCount || 0
+                    }));
                 }
             };
             
-            if (!state.isOpen) return null;
+            const handleMemberDeleteWrapper = async (member) => {
+                if (isReadOnly) return setError('唯讀模式下無法刪除成員。');
+                await handleDeleteMember(member);
+            };
+
+            if (!isMemberModalOpen) return null;
 
             return (
-              <div 
-                key={isEditing && expenseToEdit ? expenseToEdit.id : 'add-new'} 
-                className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start sm:items-center justify-center p-4 pt-8 z-50 transition-opacity"
-              >
-                <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl transform transition-transform duration-300 scale-100 max-h-[90vh] flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-gray-800">
-                        {modalTitle} {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
-                    </h3>
-                    <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 text-gray-600 transition hover:scale-110 transform">
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <div className="p-6 space-y-5 overflow-y-auto flex-1 pb-20 sm:pb-6">
-                    {modalError && <p className="text-red-600 bg-red-100 p-3 rounded-lg text-sm">{modalError}</p>}
-                    
-                    {/* 1. 品項與金額 */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">品項/描述</label>
-                        <input
-                          key="expense-description" 
-                          type="text"
-                          id="description"
-                          name="description"
-                          value={newExpense.description}
-                          onChange={handleInputChange}
-                          placeholder="例如: 晚餐，電影票"
-                          className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                          disabled={isReadOnly}
-                        />
+              // 修正：Modal 容器使用 h-screen 確保佔滿整個視埠，並設定頂部對齊 (items-start)
+              <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto">
+                  {/* 修正：將 max-w-2xl 的 max-h 改為 h-full，並確保 flex-col 垂直佈局 */}
+                  <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100 my-4 h-full sm:h-auto sm:max-h-[95vh] flex flex-col">
+                      {/* 頂部：固定標題 (flex-shrink-0) */}
+                      <div className="p-6 border-b flex justify-between items-center flex-shrink-0">
+                          <h3 className="text-xl font-bold text-gray-800">
+                            管理分帳成員與預設份數 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
+                          </h3>
+                          <button onClick={() => setIsMemberModalOpen(false)} className="p-1 rounded-full hover:bg-gray-100 text-gray-600 transition hover:scale-110 transform">
+                              <X className="w-6 h-6" />
+                          </button>
                       </div>
                       
-                      {/* 幣別選擇與金額輸入 */}
-                      <div>
-                        <label htmlFor="originalAmount" className="block text-sm font-medium text-gray-700">原始金額</label>
-                        <div className="flex space-x-2 mt-1">
-                          <select
-                              id="currency"
-                              name="currency"
-                              value={newExpense.currency}
-                              onChange={handleCurrencyChange}
-                              className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white disabled:bg-gray-100"
-                              disabled={isReadOnly}
-                          >
-                            {CURRENCIES.map(code => (
-                                <option key={code} value={code}>{code}</option>
-                            ))}
-                          </select>
-                          <input
-                            key="expense-amount" 
-                            type="number"
-                            id="originalAmount"
-                            name="originalAmount"
-                            value={newExpense.originalAmount}
-                            onChange={handleInputChange}
-                            placeholder="100.00"
-                            className="block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                            disabled={isReadOnly}
-                          />
-                        </div>
-                        
-                        {/* 顯示換算後的台幣金額 */}
-                        {newExpense.originalAmount > 0 && newExpense.currency !== DEFAULT_CURRENCY && (
-                           <p className="mt-1 text-xs text-gray-500 italic">
-                               換算台幣 (TWD) 約: 
-                               <span className="font-semibold text-primaryColor-600 ml-1">TWD {amountInTWD.toFixed(0)}</span>
-                               (匯率: {currentExchangeRate})
-                           </p>
-                        )}
-                        {newExpense.originalAmount > 0 && newExpense.currency === DEFAULT_CURRENCY && (
-                           <p className="mt-1 text-xs text-gray-500 italic">
-                               分帳計算使用此金額 (TWD)
-                           </p>
-                        )}
-                      </div>
-                    </div>
+                      {/* 修正：中間內容：可滾動 (flex-1 overflow-y-auto) */}
+                      <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+							{/* 成員管理 + 共享權限（合併版） */}
+							<div className="border p-4 rounded-lg bg-gray-50 flex-shrink-0">
+							  <h4 className="font-semibold text-lg mb-2 flex items-center text-primaryColor-700">
+								<Users className="w-5 h-5 mr-2" />
+								管理分帳成員與共享權限
+							  </h4>
 
-                    {/* 2. 付款人 */}
-                    <div>
-                      <label htmlFor="payerName" className="block text-sm font-medium text-gray-700">付款人</label>
-                      <select
-                        id="payerName"
-                        name="payerName"
-                        value={newExpense.payerName}
-                        onChange={handleInputChange}
-                        className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white"
-                        disabled={isReadOnly}
-                      >
-                        {members.map(member => (
-                          <option key={member} value={member}>
-                            {getDisplayName(member)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+							  {/* 單一輸入框：名稱 or Email */}
+							  <div className="flex gap-2 items-center mb-2">
+								<input
+								  type="text"
+								  value={memberInput}
+								  onChange={(e) => setMemberInput(e.target.value)}
+								  onKeyDown={(e) => {
+									if (e.key === 'Enter') {
+									  e.preventDefault();
+									  handleSubmitMemberInput();
+									}
+								  }}
+								  placeholder="輸入成員名稱或 Email"
+								  className="flex-grow border border-gray-300 rounded-lg p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
+								  disabled={isLoading || isReadOnly}
+								/>
+								<button
+								  onClick={handleSubmitMemberInput}
+								  className={
+									'flex-shrink-0 px-4 py-3 rounded-lg text-white font-semibold transition hover:scale-105 transform ' +
+									(memberInput.trim() === '' || isLoading || isReadOnly
+									  ? 'bg-gray-400 cursor-not-allowed'
+									  : 'bg-primaryColor-600 hover:bg-primaryColor-700')
+								  }
+								  disabled={memberInput.trim() === '' || isLoading || isReadOnly}
+								>
+								  加入
+								</button>
+							  </div>
 
-                    {/* 3. 分帳份數設定 */}
-                    <div className="pt-4 border-t border-gray-100">
-                      <div className="flex justify-between items-center mb-3">
-                        <label className="text-lg font-bold text-gray-700">分帳份數</label>
-                        <button
-                          onClick={setToAverageSplit}
-                          type="button"
-                          className="text-sm text-primaryColor-600 hover:text-primaryColor-800 font-medium disabled:opacity-50"
-                          disabled={isReadOnly}
-                        >
-                          [設為平均分配]
-                        </button>
-                      </div>
-                      <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
-                        {members.map(member => {
-                          const currentShares = newExpense.shares[member] || 0;
-                          const displayMember = getDisplayName(member);
-                          const isPayer = newExpense.payerName === member;
+							  <p className="text-xs text-gray-500 mb-3">
+								沒有「@」視為一般分帳成員；含有「@」會以 Email 邀請對方，視為可編輯成員。
+							  </p>
 
-                          return (
-                            <div key={member} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
-                              <span className={`font-medium ${isPayer ? 'text-primaryColor-700' : 'text-gray-700'}`}>
-                                {displayMember} {isPayer && '(付款人)'}
-                              </span>
-                              <div className="flex items-center space-x-2 flex-shrink-0">
-                                <button
-                                  onClick={() => handleShareChange(member, -1)}
-                                  type="button"
-                                  className="p-1.5 bg-red-50 text-red-600 rounded-lg transition hover:scale-105 transform hover:bg-red-100 shadow-sm border border-red-200 disabled:opacity-50 disabled:hover:scale-100"
-                                  aria-label="減少份數"
-                                  disabled={isReadOnly}
-                                >
-                                  <Minus className="w-5 h-5" />
-                                </button>
-                                <span className="w-8 text-center font-bold text-lg text-gray-800">{currentShares}</span>
-                                <button
-                                  onClick={() => handleShareChange(member, 1)}
-                                  type="button"
-                                  className="p-1.5 bg-green-50 text-green-600 rounded-lg transition hover:scale-105 transform hover:bg-green-100 shadow-sm border border-green-200 disabled:opacity-50 disabled:hover:scale-100"
-                                  aria-label="增加份數"
-                                  disabled={isReadOnly}
-                                >
-                                  <Plus className="w-5 h-5" />
-                                </button>
-                                <span className="text-sm text-gray-500 w-8 text-right">份</span>
+							  {/* 目前有編輯權限的成員列表 */}
+							  <div className="mt-1 text-xs text-gray-600">
+								<p className="font-semibold mb-1">目前有編輯權限的成員：</p>
+
+								{groupMembers && groupMembers.length === 0 ? (
+								  <p className="text-gray-400">尚無成員（只有你自己）。</p>
+								) : (
+								  <div className="flex flex-wrap gap-2">
+									{groupMembers && groupMembers.map((uid) => (
+									  <div
+										key={uid}
+										className="flex items-center px-2 py-1 bg-white border border-gray-300 rounded-lg text-sm"
+									  >
+										<span>
+										  {getDisplayName(uid)}
+										  {uid === groupOwner && (
+											<span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
+											  （擁有者）
+											</span>
+										  )}
+										</span>
+
+										{!isReadOnly && uid !== groupOwner && (
+										  <button
+											type="button"
+											onClick={() => removeGroupMember(uid)}
+											className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
+										  >
+											移除
+										  </button>
+										)}
+									  </div>
+									))}
+								  </div>
+								)}
+							  </div>
+							</div>
+
+                          {/* 現有成員列表 */}
+                          <div>
+                              <h4 className="font-semibold text-lg mb-3 text-gray-700">設定所有成員的預設份數</h4>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3 text-sm font-semibold text-gray-600 border-b pb-2">
+                                <span>成員名稱</span>
+                                <span className="flex items-center justify-between">預設份數 (1為平均分配)</span>
                               </div>
-                            </div>
-                          );
-                        })}
+                              <div className="space-y-2 max-h-64 pr-2">
+                                  {members.map(member => (
+                                      <div key={member} className="grid grid-cols-[1fr_auto] gap-4 items-center p-3 rounded-lg border border-gray-200 bg-white shadow-sm">
+                                          <span className={`font-medium ${member === currentUserId ? 'text-primaryColor-700' : 'text-gray-800'} truncate`} title={member}>
+                                              {getDisplayName(member)}
+                                          </span>
+                                          <div className="flex items-center space-x-2 flex-shrink">
+                                            
+                                            <button
+                                                onClick={() => handleTempShareChange(member, -1)}
+                                                type="button"
+                                                className="p-1.5 bg-red-50 text-red-600 rounded-lg transition hover:scale-105 transform hover:bg-red-100 shadow-sm border border-red-200 disabled:opacity-50"
+                                                aria-label="減少份數"
+                                                disabled={isReadOnly}
+                                            >
+                                                <Minus className="w-5 h-5" />
+                                            </button>
+                                            
+                                            <input
+                                                key={`shares-input-${member}`} 
+                                                type="number"
+                                                min="0"
+                                                value={tempDefaultShares[member] === 0 ? 0 : tempDefaultShares[member] || 1}
+                                                onChange={(e) => handleTempInputChange(member, e.target.value)}
+                                                placeholder="1"
+                                                className="w-16 border border-gray-300 rounded-lg p-2 text-center focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
+                                                disabled={isLoading || isReadOnly}
+                                            />
+                                            
+                                            <button
+                                                onClick={() => handleTempShareChange(member, 1)}
+                                                type="button"
+                                                className="p-1.5 bg-green-50 text-green-600 rounded-lg transition hover:scale-105 transform hover:bg-green-100 shadow-sm border border-green-200 disabled:opacity-50"
+                                                aria-label="增加份數"
+                                                disabled={isReadOnly}
+                                            >
+                                                <Plus className="w-5 h-5" />
+                                            </button>
+                                            
+                                            <span className="text-gray-500">份</span>
+                                            {member !== currentUserId && (
+                                                <button
+                                                    onClick={() => handleMemberDeleteWrapper(member)}
+                                                    className="p-1 text-red-500 hover:bg-red-100 rounded-full transition hover:scale-110 transform ml-auto disabled:opacity-50"
+                                                    disabled={isLoading || isReadOnly}
+                                                    aria-label="刪除成員"
+                                                >
+                                                    <UserMinus className="w-5 h-5" />
+                                                </button>
+                                            )}
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
                       </div>
-                    </div>
-					<div className="pt-6 border-t flex justify-end mt-6">
-					  <button
-					    onClick={saveExpense}
-					    disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName}
-					    className={
-						  "flex items-center px-6 py-3 rounded-full text-white font-semibold transition duration-150 shadow-md " +
-						  ((isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName)
-						    ? "bg-gray-400 cursor-not-allowed"
-						    : "bg-primaryColor-600 hover:bg-primaryColor-700 hover:shadow-lg")
-					    }
-					  >
-					    {isLoadingModal ? '儲存中...' : (
-						  <>
-						    <CircleCheck className="w-5 h-5 mr-2" />
-						    {submitText}
-						  </>
-					    )}
-					  </button>
-				    </div>
-				  </div>
-                </div>
+                      {/* 底部：固定儲存按鈕 (flex-shrink-0) */}
+                      <div className="p-6 border-t flex justify-end flex-shrink-0">
+                          <button
+                              onClick={() => handleSaveDefaultShares(tempDefaultShares)}
+                              disabled={isLoading || isReadOnly}
+                              className={
+                                "flex items-center px-6 py-3 rounded-full text-white font-semibold transition hover:scale-105 transform duration-150 shadow-md " +
+                                ((isLoading || isReadOnly)
+                                  ? "bg-gray-400 cursor-not-allowed"
+                                  : "bg-primaryColor-600 hover:bg-primaryColor-700 hover:shadow-lg")
+                              }
+                          >
+                              <CircleCheck className="w-5 h-5 mr-2" />
+                              儲存預設份數
+                          </button>
+                      </div>
+                  </div>
               </div>
             );
         });
