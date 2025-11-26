@@ -935,7 +935,7 @@
 							  </div>
 
 							  <p className="text-xs text-gray-500 mb-3">
-								沒有「@」視為一般分帳成員；含有「@」會以 Email 邀請對方，視為可編輯成員。
+								以名稱加入，為一般成員；以Email加入，為可編輯成員。
 							  </p>
 
 							  {/* 目前有編輯權限的成員列表 */}
@@ -2071,7 +2071,7 @@
             return <AuthModal auth={auth} db={db} />;
           }
 
-          return (
+		  return (
             <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
               <div className="max-w-4xl mx-auto">
                 {/* 標題和主要操作按鈕 */}
@@ -2199,6 +2199,14 @@
                         <p className="text-sm">{error}</p>
                     </div>
                 )}
+                
+                {/* 新增：複製連結成功或失敗的訊息提示 (Toast 效果) */}
+                {copyMessage && (
+                    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 p-3 bg-primaryColor-600 text-white rounded-lg shadow-xl z-50 transition-opacity duration-300">
+                        <p className="font-semibold text-sm">{copyMessage}</p>
+                    </div>
+                )}
+                
 				
                 {/* 主要功能區塊 */}
                 <div className="mt-6 flex space-x-4">
