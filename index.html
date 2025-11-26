@@ -1413,18 +1413,12 @@
 			});
 		  }, []);
 
-            // 登出
-			const logout = useCallback(async () => {
-			  // 先跳出確認視窗
-			  const confirmed = window.confirm('確定要登出嗎？');
+			// 登出（改用 confirm modal，而不是 window.confirm）
+			const logout = useCallback(() => {
+			  if (!auth) return;
 
-			  // 如果使用者按「取消」，就不做任何事
-			  if (!confirmed) {
-				return;
-			  }
-
-			  // 使用者按「確定」才真的登出
-			  if (auth) {
+			  const onConfirm = async () => {
+				closeConfirmModal();
 				try {
 				  await auth.signOut();
 				  setExpenses([]);
@@ -1433,8 +1427,22 @@
 				} catch (e) {
 				  setError(`登出失敗: ${e.message}`);
 				}
-			  }
-			}, [auth]);
+			  };
+
+			  openConfirmModal(
+				'確認登出',
+				'您確定要登出嗎？',
+				onConfirm
+			  );
+			}, [
+			  auth,
+			  openConfirmModal,
+			  closeConfirmModal,
+			  setExpenses,
+			  setCustomMembers,
+			  setDefaultSharesConfig,
+			  setError
+			]);
 
           // --- 4. 數據獲取 (Firestore 監聽) ---
           useEffect(() => {
@@ -1730,10 +1738,9 @@
 			);
 
 			// 從群組中移除成員（同時從分帳成員名單中移除）
-			// 不允許移除擁有者
+			// 使用 confirm modal，而不是 window.confirm
 			const removeGroupMember = React.useCallback(
-			  async (memberUid) => {
-				if (!db || !currentCollectionId) return;
+			  (memberUid) => {
 				if (isReadOnly) return;
 
 				// 不允許移除 owner
@@ -1742,27 +1749,49 @@
 				  return;
 				}
 
-				try {
-				  setIsLoading(true);
-				  setError(null);
+				const onConfirm = async () => {
+				  closeConfirmModal();
+				  try {
+					setIsLoading(true);
+					setError(null);
 
-				  // 1) 從 group.members 移除
-				  const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
-				  await groupRef.update({
-					members: firebase.firestore.FieldValue.arrayRemove(memberUid),
-				  });
+					// 1) 從 group.members 移除
+					const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
+					await groupRef.update({
+					  members: firebase.firestore.FieldValue.arrayRemove(memberUid),
+					});
 
-				  // 2) 從分帳成員列表移除
-				  const newMemberList = customMembers.filter((id) => id !== memberUid);
-				  await saveMembers(newMemberList);
-				} catch (e) {
-				  console.error('removeGroupMember error:', e);
-				  setError(`移除成員失敗：${e.message}`);
-				} finally {
-				  setIsLoading(false);
-				}
+					// 2) 從分帳成員列表移除
+					const newMemberList = customMembers.filter(id => id !== memberUid);
+					await saveMembers(newMemberList);
+
+				  } catch (e) {
+					console.error('removeGroupMember error:', e);
+					setError(`移除成員失敗：${e.message}`);
+				  } finally {
+					setIsLoading(false);
+				  }
+				};
+
+				openConfirmModal(
+				  '確認移除共享成員',
+				  `確定要移除成員「${getDisplayName(memberUid)}」嗎？`,
+				  onConfirm
+				);
 			  },
-			  [db, currentCollectionId, isReadOnly, groupOwner, customMembers, saveMembers]
+			  [
+				db,
+				currentCollectionId,
+				isReadOnly,
+				groupOwner,
+				customMembers,
+				saveMembers,
+				openConfirmModal,
+				closeConfirmModal,
+				getDisplayName,
+				setError,
+				setIsLoading
+			  ]
 			);
 
           const handleDeleteMember = useCallback(async (nameToDelete) => {
@@ -1976,62 +2005,81 @@
 			const currentUserLabel = userId ? getDisplayName(userId) : '';
 			const isViewingOwn = currentCollectionId === userId;
 
-			// 返回自己的記帳簿
-			const handleReturnToOwn = React.useCallback(async () => {
+			// 返回自己的記帳簿（加入 confirm modal）
+			const handleReturnToOwn = React.useCallback(() => {
 			  if (!db || !userId) return;
 
-			  try {
-				setIsLoading(true);
-				setError(null);
+			  const onConfirm = async () => {
+				closeConfirmModal();
 
-				const usersCollectionPath = `artifacts/${appId}/users`;
-				const usersRef = db.collection(usersCollectionPath);
-				const myDocRef = usersRef.doc(userId);
-				const mySnap = await myDocRef.get();
+				try {
+				  setIsLoading(true);
+				  setError(null);
 
-				let myShortCode = null;
+				  const usersCollectionPath = `artifacts/${appId}/users`;
+				  const usersRef = db.collection(usersCollectionPath);
+				  const myDocRef = usersRef.doc(userId);
+				  const mySnap = await myDocRef.get();
 
-				if (mySnap.exists) {
-				  const data = mySnap.data() || {};
-				  myShortCode = data.shortCode || null;
+				  let myShortCode = null;
+
+				  if (mySnap.exists) {
+					const data = mySnap.data() || {};
+					myShortCode = data.shortCode || null;
+				  }
+
+				  // 如果還沒有 shortCode，就幫自己產生一個
+				  if (!myShortCode) {
+					myShortCode = generateShortCode();
+					await myDocRef.set(
+					  {
+						shortCode: myShortCode,
+						createdAt: serverTimestamp(),
+					  },
+					  { merge: true }
+					);
+				  }
+
+				  // 切回自己的紀帳簿
+				  setCurrentCollectionId(userId);
+				  setCurrentCollectionShortCode(myShortCode);
+
+				  // 更新網址為 /g/自己的 shortCode（不重整頁面）
+				  const url = new URL(window.location.href);
+				  let rootPath = url.pathname;
+				  const marker = '/g/';
+				  const idx = rootPath.indexOf(marker);
+				  if (idx !== -1) {
+					rootPath = rootPath.slice(0, idx);
+				  }
+				  if (!rootPath.endsWith('/')) {
+					rootPath = rootPath + '/';
+				  }
+				  const newUrl = `${rootPath}g/${myShortCode}`;
+				  window.history.replaceState(null, '', newUrl);
+				} catch (e) {
+				  console.error('handleReturnToOwn error:', e);
+				  setError(`返回自己的記帳簿失敗：${e.message}`);
+				} finally {
+				  setIsLoading(false);
 				}
+			  };
 
-				// 如果還沒有 shortCode，就幫自己產生一個
-				if (!myShortCode) {
-				  myShortCode = generateShortCode();
-				  await myDocRef.set(
-					{
-					  shortCode: myShortCode,
-					  createdAt: serverTimestamp(),
-					},
-					{ merge: true }
-				  );
-				}
-
-				// 切回自己的紀帳簿
-				setCurrentCollectionId(userId);
-				setCurrentCollectionShortCode(myShortCode);
-
-				// 更新網址為 /g/自己的 shortCode（不重整頁面）
-				const url = new URL(window.location.href);
-				let rootPath = url.pathname;
-				const marker = '/g/';
-				const idx = rootPath.indexOf(marker);
-				if (idx !== -1) {
-				  rootPath = rootPath.slice(0, idx);
-				}
-				if (!rootPath.endsWith('/')) {
-				  rootPath = rootPath + '/';
-				}
-				const newUrl = `${rootPath}g/${myShortCode}`;
-				window.history.replaceState(null, '', newUrl);
-			  } catch (e) {
-				console.error('handleReturnToOwn error:', e);
-				setError(`返回自己的記帳簿失敗：${e.message}`);
-			  } finally {
-				setIsLoading(false);
-			  }
-			}, [db, userId]);
+			  openConfirmModal(
+				'返回自己的記帳簿',
+				'確定要離開這本共享記帳簿並返回自己的記帳簿嗎？\n此操作不會刪除任何紀錄。',
+				onConfirm
+			  );
+			}, [
+			  db,
+			  userId,
+			  openConfirmModal,
+			  closeConfirmModal,
+			  setIsLoading,
+			  setError,
+			  setCurrentCollectionId,
+			  setCurrentCollectionShortCode,
+			]);
 
           if (!authReady) {
             return (
