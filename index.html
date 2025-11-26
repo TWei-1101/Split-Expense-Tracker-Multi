@@ -1840,70 +1840,70 @@
 					<div className="flex items-center gap-3">
 					  <Pencil className="w-10 h-10 text-primaryColor-700" />
 					  
-					  {isEditingGroupName && !isReadOnly ? (
-						<div className="flex items-center gap-2 flex-1">
-						  <input
-							type="text"
-							value={groupNameInput}
-							onChange={(e) => setGroupNameInput(e.target.value)}
-							onKeyDown={(e) => {
-							  if (e.key === 'Enter') {
-								e.preventDefault();
-								saveGroupName();
-							  } else if (e.key === 'Escape') {
-								e.preventDefault();
-								cancelEditGroupName();
+						{isEditingGroupName && !isReadOnly ? (
+						  <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
+							<input
+							  type="text"
+							  value={groupNameInput}
+							  onChange={(e) => setGroupNameInput(e.target.value)}
+							  onKeyDown={(e) => {
+								if (e.key === 'Enter') {
+								  e.preventDefault();
+								  saveGroupName();
+								} else if (e.key === 'Escape') {
+								  e.preventDefault();
+								  cancelEditGroupName();
+								}
+							  }}
+							  className="w-full border-b border-primaryColor-500 bg-transparent text-2xl sm:text-3xl font-extrabold text-primaryColor-700 focus:outline-none focus:border-primaryColor-700"
+							  autoFocus
+							  maxLength={40}
+							  placeholder="輸入這本分帳記帳簿名稱"
+							/>
+
+							{/* 按鈕在手機時會換到下一行 */}
+							<div className="flex gap-2 justify-end sm:justify-start">
+							  <button
+								type="button"
+								onClick={saveGroupName}
+								disabled={isLoading || !groupNameInput.trim()}
+								className={
+								  "px-3 py-1 rounded-lg text-sm font-semibold text-white shadow-md " +
+								  ((isLoading || !groupNameInput.trim())
+									? "bg-gray-400 cursor-not-allowed"
+									: "bg-primaryColor-600 hover:bg-primaryColor-700")
+								}
+							  >
+								儲存
+							  </button>
+							  <button
+								type="button"
+								onClick={cancelEditGroupName}
+								className="px-3 py-1 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100"
+							  >
+								取消
+							  </button>
+							</div>
+						  </div>
+						) : (
+						  // 原本的顯示模式保持不變
+						  <div className="flex flex-col">
+							<h1
+							  className={
+								"text-3xl sm:text-4xl font-extrabold text-primaryColor-700 " +
+								(isReadOnly ? "" : "cursor-text hover:underline decoration-dotted")
 							  }
-							}}
-							className="flex-1 border-b border-primaryColor-500 bg-transparent text-3xl font-extrabold text-primaryColor-700 focus:outline-none focus:border-primaryColor-700"
-							autoFocus
-							maxLength={40}
-							placeholder="輸入這本分帳記帳簿名稱"
-						  />
-						  <button
-							type="button"
-							onClick={saveGroupName}
-							disabled={isLoading || !groupNameInput.trim()}
-							className={
-							  "px-3 py-1 rounded-lg text-sm font-semibold text-white shadow-md " +
-							  ((isLoading || !groupNameInput.trim())
-								? "bg-gray-400 cursor-not-allowed"
-								: "bg-primaryColor-600 hover:bg-primaryColor-700")
-							}
-						  >
-							儲存
-						  </button>
-						  <button
-							type="button"
-							onClick={cancelEditGroupName}
-							className="px-3 py-1 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100"
-						  >
-							取消
-						  </button>
-						</div>
-					  ) : (
-						<div className="flex flex-col">
-						  <h1
-							className={
-							  "text-4xl font-extrabold text-primaryColor-700 " +
-							  (isReadOnly ? "" : "cursor-text hover:underline decoration-dotted")
-							}
-							onClick={() => {
-							  if (!isReadOnly) {
-								startEditGroupName();
-							  }
-							}}
-							title={isReadOnly ? "" : "點擊以修改這本分帳記帳簿名稱"}
-						  >
-							{groupName || '分帳記帳簿'}
-						  </h1>
-						  {!isReadOnly && (
-							<span className="text-xs text-gray-400">
-							  （點擊上方名稱即可重新命名這本分帳記帳簿）
-							</span>
-						  )}
-						</div>
-					  )}
+							  onClick={() => {
+								if (!isReadOnly) {
+								  startEditGroupName();
+								}
+							  }}
+							  title={isReadOnly ? "" : "點擊以修改這本分帳記帳簿名稱"}
+							>
+							  {groupName || '分帳記帳簿'}
+							</h1>
+						  </div>
+						)}
 					</div>
 
 					{lastExchangeUpdate && (
