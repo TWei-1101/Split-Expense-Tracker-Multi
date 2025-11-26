@@ -206,6 +206,17 @@
 			}
 		};
 
+        // --- 分享連結用的短代碼產生器 ---
+        const generateShortCode = (length = 6) => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 避免 O/0、I/1 等混淆
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        };
+
+
         // --- 內聯 SVG 圖標元件 (Lucide 樣式) ---
         const IconProps = {
             stroke: "currentColor",
@@ -420,21 +431,39 @@
         /**
          * 紀錄簿共享與切換元件（已移除手動輸入 UID 切換功能）
          */
-        const CollectionSwitch = React.memo(({ userId, currentCollectionId, getDisplayName, logout, userProfiles }) => {
+        const CollectionSwitch = React.memo(({ userId, currentCollectionId, currentCollectionShortCode, getDisplayName, logout, userProfiles }) => {
             const [copyMessage, setCopyMessage] = useState('');
 
             // 複製分享連結
             const handleCopyLink = () => {
-                if (!userId) return;
+                if (!userId || !currentCollectionId) return;
 
-                const baseUrl = window.location.origin + window.location.pathname;
-                const shareUrl = `${baseUrl}?shareId=${currentCollectionId}`;
-                
+                const { origin, pathname } = window.location;
+                // 把目前網址裡的 /g/xxx 去掉，保留根路徑
+                let rootPath = pathname;
+                const marker = '/g/';
+                const idx = rootPath.indexOf(marker);
+                if (idx !== -1) {
+                    rootPath = rootPath.slice(0, idx);
+                }
+                if (!rootPath.endsWith('/')) {
+                    rootPath = rootPath + '/';
+                }
+
+                let shareUrl;
+                if (currentCollectionShortCode) {
+                    // 新版短網址： https://domain/root/g/ABC123
+                    shareUrl = `${origin}${rootPath}g/${currentCollectionShortCode}`;
+                } else {
+                    // 後備：還沒產生短代碼時，用舊的 ?shareId= 方式
+                    shareUrl = `${origin}${rootPath}?shareId=${currentCollectionId}`;
+                }
+
                 const tempInput = document.createElement('textarea');
                 tempInput.value = shareUrl;
                 document.body.appendChild(tempInput);
                 tempInput.select();
-                
+
                 try {
                     document.execCommand('copy');
                     setCopyMessage('✨ 連結已複製！');
@@ -442,7 +471,7 @@
                     console.error('無法複製連結', err);
                     setCopyMessage('複製失敗，請手動複製網址。');
                 }
-                
+
                 document.body.removeChild(tempInput);
                 setTimeout(() => setCopyMessage(''), 4000);
             };
@@ -1086,6 +1115,7 @@
 		  const [detectedCountry, setDetectedCountry] = useState(null);
           
           const [currentCollectionId, setCurrentCollectionId] = useState(null); // 目前正在檢視的 groupId
+		  const [currentCollectionShortCode, setCurrentCollectionShortCode] = useState(null); // 分享用短代碼
 		  const [groupOwner, setGroupOwner] = useState(null);                   // 群組擁有者 uid
 		  const [groupMembers, setGroupMembers] = useState([]);                 // 群組成員 uid 清單
 
@@ -1150,64 +1180,114 @@
 		  return () => clearTimeout(timer);
 		}, [error]);
 		
-          // --- 1. Firebase 初始化與驗證 ---
-		useEffect(() => {
-		  if (!firebaseConfig) {
-			setError('Firebase configuration is missing.');
-			setAuthReady(true); 
-			return;
-		  }
+          // --- 1. Firebase 初始化與驗證（支援 /g/短代碼） ---
+          useEffect(() => {
+            if (!firebaseConfig) {
+              setError('Firebase configuration is missing.');
+              setAuthReady(true);
+              return;
+            }
 
-		  try {
-			const app = firebase.initializeApp(firebaseConfig);
-			const _auth = app.auth();
-			const _db = app.firestore();
+            try {
+              const app = firebase.initializeApp(firebaseConfig);
+              const _auth = app.auth();
+              const _db = app.firestore();
 
-			setDb(_db);
-			setAuth(_auth);
+              setDb(_db);
+              setAuth(_auth);
 
-			const unsubscribe = _auth.onAuthStateChanged((user) => {
-			  if (user) {
-				// 用 IIFE 包 async，避免直接把 callback 宣告成 async
-				(async () => {
-				  try {
-					setUserId(user.uid);
+              const usersCollectionPath = `artifacts/${appId}/users`;
+              const usersRef = _db.collection(usersCollectionPath);
 
-					const urlParams = new URLSearchParams(window.location.search);
-					const shareId = urlParams.get('shareId');
+              const unsubscribe = _auth.onAuthStateChanged(async (user) => {
+                try {
+                  if (user) {
+                    setUserId(user.uid);
 
-					let targetGroupId;
+                    // 1. 先幫登入者自己建立 / 補上短代碼
+                    let myShortCode = null;
+                    try {
+                      const myDocRef = usersRef.doc(user.uid);
+                      const mySnap = await myDocRef.get();
+                      if (mySnap.exists) {
+                        const data = mySnap.data() || {};
+                        myShortCode = data.shortCode || null;
+                      }
+                      if (!myShortCode) {
+                        myShortCode = generateShortCode();
+                        await myDocRef.set(
+                          {
+                            shortCode: myShortCode,
+                            createdAt: serverTimestamp(),
+                          },
+                          { merge: true }
+                        );
+                      }
+                    } catch (err) {
+                      console.error('初始化使用者短代碼失敗：', err);
+                    }
 
-					if (shareId) {
-					  // 若有 shareId，代表是被分享的 group
-					  targetGroupId = shareId;
-					  history.replaceState(null, null, window.location.pathname);
-					} else {
-					  // 否則就確保自己的預設群組存在
-					  targetGroupId = await ensureDefaultGroup(_db, user.uid);
-					}
+                    // 2. 解析網址：優先支援 /g/SHORT，其次舊版 ?shareId=
+                    const url = new URL(window.location.href);
+                    const urlParams = url.searchParams;
+                    const shareId = urlParams.get('shareId');
 
-					setCurrentCollectionId(targetGroupId);
-				  } catch (err) {
-					console.error("onAuthStateChanged async error:", err);
-					setError(`Auth state error: ${err.message}`);
-				  } finally {
-					setAuthReady(true);
-				  }
-				})();
-			  } else {
-				setUserId(null);
-				setCurrentCollectionId(null);
-				setAuthReady(true);
-			  }
-			});
-			
-			return () => unsubscribe();
-		  } catch (e) {
-			setError(`Firebase initialization failed: ${e.message}`);
-			setAuthReady(true);
-		  }
-		}, [ensureDefaultGroup]);
+                    let shortCodeFromPath = null;
+                    const path = url.pathname || '';
+                    const marker = '/g/';
+                    const idx = path.indexOf(marker);
+                    if (idx !== -1) {
+                      const after = path.slice(idx + marker.length);
+                      shortCodeFromPath = after.split('/')[0] || null;
+                    }
+
+                    let targetCollectionId = user.uid;
+                    let targetShortCode = myShortCode || null;
+
+                    if (shortCodeFromPath) {
+                      try {
+                        // 用短代碼查出擁有者的 userId
+                        const snap = await usersRef
+                          .where('shortCode', '==', shortCodeFromPath)
+                          .limit(1)
+                          .get();
+                        if (!snap.empty) {
+                          const doc = snap.docs[0];
+                          targetCollectionId = doc.id;
+                          const data = doc.data() || {};
+                          targetShortCode = data.shortCode || shortCodeFromPath;
+                        } else {
+                          setError('找不到對應的分帳簿，已切回自己的紀錄簿。');
+                        }
+                      } catch (err) {
+                        console.error('依短代碼尋找分帳簿失敗：', err);
+                        setError('連結載入失敗，已切回自己的紀錄簿。');
+                      }
+                    } else if (shareId) {
+                      // 舊版連結：?shareId=UID 還是可以用
+                      targetCollectionId = shareId;
+                      // 清掉舊版 query，避免之後重複解析
+                      window.history.replaceState(null, '', url.pathname);
+                    }
+
+                    setCurrentCollectionId((prev) => prev || targetCollectionId);
+                    setCurrentCollectionShortCode(targetShortCode);
+                  } else {
+                    setUserId(null);
+                    setCurrentCollectionId(null);
+                    setCurrentCollectionShortCode(null);
+                  }
+                } finally {
+                  setAuthReady(true);
+                }
+              });
+
+              return () => unsubscribe();
+            } catch (e) {
+              setError(`Firebase initialization failed: ${e.message}`);
+              setAuthReady(true);
+            }
+          }, []);
 
 		// --- 監聽目前 group 的 owner / members ---
 		useEffect(() => {
@@ -1994,6 +2074,7 @@
                 <CollectionSwitch 
                     userId={userId} 
                     currentCollectionId={currentCollectionId} 
+					currentCollectionShortCode={currentCollectionShortCode}
                     getDisplayName={getDisplayName}
                     logout={logout}
                     userProfiles={userProfiles}
