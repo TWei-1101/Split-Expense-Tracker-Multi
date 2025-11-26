@@ -1961,10 +1961,25 @@
 
 			// 複製分享連結（移到 header 使用）
 			const handleCopyShareLink = React.useCallback(() => {
-			  if (!userId || !currentCollectionId) return;
+			  if (!userId || !currentCollectionId || !currentCollectionShortCode) return;
 
-			  const baseUrl = window.location.origin + window.location.pathname;
-			  const shareUrl = `${baseUrl}?shareId=${currentCollectionId}`;
+			  // 1. 獲取網址的基本路徑
+			  const url = new URL(window.location.href);
+			  let rootPath = url.pathname;
+			  const marker = '/g/';
+			  const idx = rootPath.indexOf(marker);
+			  
+			  // 移除路徑中可能存在的 /g/SHORT_CODE 部分
+			  if (idx !== -1) {
+				rootPath = rootPath.slice(0, idx);
+			  }
+			  if (!rootPath.endsWith('/')) {
+				rootPath = rootPath + '/';
+			  }
+
+			  // 2. 組裝新的短代碼分享連結
+			  // 格式：您的網域/g/短代碼
+			  const shareUrl = `${window.location.origin}${rootPath}g/${currentCollectionShortCode}`; // 複製短代碼連結！
 
 			  const tempInput = document.createElement('textarea');
 			  tempInput.value = shareUrl;
@@ -1981,7 +1996,7 @@
 
 			  document.body.removeChild(tempInput);
 			  setTimeout(() => setCopyMessage(''), 4000);
-			}, [userId, currentCollectionId]);
+			}, [userId, currentCollectionId, currentCollectionShortCode]); // 確保 currentCollectionShortCode 加入依賴項
 
 			// 返回自己的記帳簿（加入 confirm modal）
 			const handleReturnToOwn = React.useCallback(() => {
