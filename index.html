@@ -19,6 +19,13 @@
             -webkit-appearance: none;
             margin: 0;
         }
+        /* ✨ NEW: 修正 Modal 閃爍問題，針對 Safari/WebKit 優化 */
+        .force-gpu {
+            /* 讓瀏覽器推到獨立圖層，解決背景閃爍 */
+            transform: translateZ(0);
+            /* 告訴瀏覽器準備變化，避免重新計算 */
+            will-change: transform; 
+        }
     </style>
     
     <script>
@@ -274,7 +281,7 @@
                     : 'bg-red-600 hover:bg-red-700';
 
             return (
-                <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[9999] transition-opacity">
+                <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[9999] transition-opacity force-gpu">
                     <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl transform transition-transform duration-300 scale-100">
                         <div className="p-6">
                             <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
@@ -359,7 +366,7 @@
             };
 
             return (
-                <div className="fixed inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center p-4 z-50">
+                <div className="fixed inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center p-4 z-50 force-gpu">
                     <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 sm:p-8">
                         <h3 className="text-3xl font-bold text-primaryColor-600 text-center mb-6">
                             {isLogin ? '登入紀錄簿' : '註冊新帳號'}
@@ -603,10 +610,10 @@
             if (!state.isOpen) return null;
 
             return (
-              // 修正：Modal 容器使用 h-screen 確保佔滿整個視埠，並設定頂部對齊 (items-start)
+              // 應用 force-gpu 到背景層
               <div 
                 key={isEditing && expenseToEdit ? expenseToEdit.id : 'add-new'} 
-                className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto"
+                className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto force-gpu"
               >
                 {/* 修正：新增 h-full 和 flex flex-col 讓內容可以獨立滾動 */}
                 <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl transform transition-transform duration-300 scale-100 my-4 h-full sm:h-auto sm:max-h-[95vh] flex flex-col">
@@ -644,7 +651,7 @@
                       
                       {/* 幣別選擇與金額輸入 */}
                       <div>
-                        <label htmlFor="originalAmount" className="block text-sm font-medium text-gray-700">原始金額</label>
+                        <label htmlFor="originalAmount" className="block text-sm font-medium text-gray-700">幣值/金額</label>
                         <div className="flex space-x-2 mt-1">
                           <select
                               id="currency"
@@ -897,8 +904,8 @@
             if (!isMemberModalOpen) return null;
 
             return (
-              // 修正：Modal 容器使用 h-screen 確保佔滿整個視埠，並設定頂部對齊 (items-start)
-              <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto">
+              // 應用 force-gpu 到背景層
+              <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto force-gpu">
                   {/* 修正：將 max-w-2xl 的 max-h 改為 h-full，並確保 flex-col 垂直佈局 */}
                   <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100 my-4 h-full sm:h-auto sm:max-h-[95vh] flex flex-col">
                       {/* 頂部：固定標題 (flex-shrink-0) */}
@@ -939,7 +946,7 @@
 									  handleSubmitMemberInput();
 									}
 								  }}
-								  placeholder="輸入成員名稱或 Email"
+								  placeholder="輸入名稱或Email"
 								  className="flex-grow border border-gray-300 rounded-lg p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500 disabled:bg-gray-100"
 								  disabled={isLoading || isReadOnly}
 								/>
@@ -958,7 +965,7 @@
 							  </div>
 
 							  <p className="text-xs text-gray-500 mb-3">
-								以名稱加入，為一般成員；以Email加入，為可編輯成員。
+								以Email加入，為可編輯成員。
 							  </p>
 
 							  {/* 目前有編輯權限的成員列表 */}
@@ -1004,7 +1011,7 @@
                               <h4 className="font-semibold text-lg mb-3 text-gray-700">設定所有成員的預設份數</h4>
                               <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3 text-sm font-semibold text-gray-600 border-b pb-2">
                                 <span>成員名稱</span>
-                                <span className="flex items-center justify-between">預設份數 (1為平均分配)</span>
+                                <span className="flex items-center justify-between">預設份數</span>
                               </div>
                               <div className="space-y-2 max-h-64 pr-2">
                                   {members.map(member => (
