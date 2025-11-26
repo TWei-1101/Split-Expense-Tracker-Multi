@@ -86,6 +86,12 @@
         const { firestore } = firebase;
         const serverTimestamp = firestore.FieldValue.serverTimestamp; 
         
+		const getGroupExpensesPath = (groupId) =>
+		  `artifacts/${appId}/groups/${groupId}/expenses`;
+
+		const getGroupMembersDocPath = (groupId) =>
+		  `artifacts/${appId}/groups/${groupId}/settings/members`;
+		
         // --- 匯率設定 (預設值作為備用) ---
         const DEFAULT_EXCHANGE_RATES = {
             'TWD': 1.0,   // 基準貨幣：臺幣
@@ -1376,13 +1382,6 @@
 		  }
 		};
 
-		// --- Firestore 路徑 helper ---
-		const getGroupExpensesPath = (groupId) =>
-		  `artifacts/${appId}/groups/${groupId}/expenses`;
-
-		const getGroupMembersDocPath = (groupId) =>
-		  `artifacts/${appId}/groups/${groupId}/settings/members`;
-
           // --- 2. 獲取所有公共暱稱 ---
           useEffect(() => {
             if (!authReady || !db) return;
@@ -1628,7 +1627,7 @@
 
               openConfirmModal(
                   '確認清除所有支出', 
-                  '您確定要刪除此記帳簿中的所有支出記錄嗎？（成員清單和預設份數將被保留）', 
+                  '您確定要刪除此記帳簿中的所有支出記錄嗎？', 
                   onConfirm
               );
           }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
