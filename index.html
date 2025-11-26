@@ -785,7 +785,7 @@
             );
         });
           
-		/**
+/**
          * 成員管理 Modal (核心邏輯獨立)
          * 已移除未使用的 collectionId 參數
          */
@@ -805,21 +805,6 @@
                 }
             }, [isMemberModalOpen, members, defaultSharesConfig]);
             
-			// --- 使用 GPS 偵測所在地，推測預設幣別 ---
-			useEffect(() => {
-				if (!navigator.geolocation) {
-					console.log("此瀏覽器不支援地理定位，使用預設幣別 TWD");
-					return;
-				}
-
-				// 注意：此處的邏輯應移至 App 主元件，因為它是在設定 `defaultCurrency`，
-				// 但為了保持 MemberManagementModal 獨立，先保留在這裡，假設您在 App 元件中有對應的狀態和 Setter。
-				// 在您提供的程式碼中，setDefaultCurrency 和 setDetectedCountry 不在 MemberManagementModal 的作用域內，
-				// 為了修正顯示問題，我將先移除這段程式碼，避免造成錯誤。
-				/* navigator.geolocation.getCurrentPosition( ... ) 
-				*/
-
-			}, []);
 			
 			// 只處理「一般成員名稱」→ 加到分帳成員名單
 			const handleAddMemberByName = async (name) => {
@@ -888,10 +873,11 @@
             if (!isMemberModalOpen) return null;
 
             return (
-              <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50 transition-opacity">
-                  {/* 新增 max-h-[95vh] 和 flex flex-col 讓內容可以獨立滾動 */}
-                  <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100 max-h-[95vh] flex flex-col">
-                      {/* 頂部：固定標題 */}
+              // 修正：Modal 容器使用 h-screen 確保佔滿整個視埠，並設定頂部對齊 (items-start)
+              <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto">
+                  {/* 修正：將 max-w-2xl 的 max-h 改為 h-full，並確保 flex-col 垂直佈局 */}
+                  <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl transform transition-transform duration-300 scale-100 my-4 h-full sm:h-auto sm:max-h-[95vh] flex flex-col">
+                      {/* 頂部：固定標題 (flex-shrink-0) */}
                       <div className="p-6 border-b flex justify-between items-center flex-shrink-0">
                           <h3 className="text-xl font-bold text-gray-800">
                             管理分帳成員與預設份數 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
@@ -901,7 +887,7 @@
                           </button>
                       </div>
                       
-                      {/* 中間內容：可滾動 */}
+                      {/* 修正：中間內容：可滾動 (flex-1 overflow-y-auto) */}
                       <div className="p-6 space-y-6 flex-1 overflow-y-auto">
 							{/* 成員管理 + 共享權限（合併版） */}
 							<div className="border p-4 rounded-lg bg-gray-50 flex-shrink-0">
@@ -1045,7 +1031,7 @@
                               </div>
                           </div>
                       </div>
-                      {/* 底部：固定儲存按鈕 */}
+                      {/* 底部：固定儲存按鈕 (flex-shrink-0) */}
                       <div className="p-6 border-t flex justify-end flex-shrink-0">
                           <button
                               onClick={() => handleSaveDefaultShares(tempDefaultShares)}
@@ -1065,7 +1051,7 @@
               </div>
             );
         });
-
+		
         /**
          * 主要的 App 元件
          */
