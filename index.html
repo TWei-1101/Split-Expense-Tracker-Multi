@@ -2084,12 +2084,8 @@
 				<div className="mt-4 p-4 bg-white rounded-xl border border-primaryColor-200 shadow-sm">
 				  <h2 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
 					<Users className="w-4 h-4 mr-2" />
-					共享成員（可編輯這本記帳簿）
+					共享成員
 				  </h2>
-				  <p className="text-xs text-gray-500 mb-3">
-					請輸入對方「在此系統登入用的 Email」。只有成員可以新增 / 編輯 / 刪除支出。
-				  </p>
-
 				  <div className="flex flex-col sm:flex-row gap-2">
 					<input
 					  type="email"
@@ -2135,11 +2131,6 @@
 								{uid === groupOwner && (
 								  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
 									（擁有者）
-								  </span>
-								)}
-								{uid === userId && (
-								  <span className="ml-1 text-[11px] text-green-600 font-semibold">
-									（你）
 								  </span>
 								)}
 							  </div>
