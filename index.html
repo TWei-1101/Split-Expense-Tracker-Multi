@@ -1093,7 +1093,10 @@
 		  const isReadOnly = !groupMembers.includes(userId);
 		
 		  const [inviteEmail, setInviteEmail] = useState(''); // 用來輸入要邀請的 email
-		
+		  const [groupName, setGroupName] = useState('分帳記帳簿');     // 顯示在上方標題的名稱
+		  const [isEditingGroupName, setIsEditingGroupName] = useState(false); 
+		  const [groupNameInput, setGroupNameInput] = useState('分帳記帳簿'); // 編輯時使用
+
           const [expenses, setExpenses] = useState([]);
           const [customMembers, setCustomMembers] = useState([]); 
           const [defaultSharesConfig, setDefaultSharesConfig] = useState({}); 
@@ -1111,6 +1114,7 @@
 			    owner: uid,
 			    members: [uid],
 			    createdAt: serverTimestamp(),
+				name: '分帳記帳簿',
 			  });
 		    }
 		    return groupId;
@@ -1258,13 +1262,19 @@
 				const mergedMembers = members.includes(owner)
 				  ? members
 				  : [...members, owner].filter(Boolean);
+				  
+				const nameFromDb = data.name || '分帳記帳簿';
 
 				setGroupOwner(owner);
 				setGroupMembers(mergedMembers);
+				setGroupName(nameFromDb);
+				setGroupNameInput(nameFromDb);
 			  } else {
 				console.warn("Group doc not found:", currentCollectionId);
 				setGroupOwner(null);
 				setGroupMembers([]);
+				setGroupName('分帳記帳簿');
+				setGroupNameInput('分帳記帳簿');
 			  }
 			},
 			(err) => {
@@ -1276,6 +1286,49 @@
 
 		  return () => unsub();
 		}, [db, currentCollectionId]);
+
+		// 開始編輯群組名稱（只有成員可以編）
+		const startEditGroupName = () => {
+		  if (isReadOnly) return; // 非成員不能改
+		  setGroupNameInput(groupName || '分帳記帳簿');
+		  setIsEditingGroupName(true);
+		};
+
+		// 取消修改
+		const cancelEditGroupName = () => {
+		  setIsEditingGroupName(false);
+		  setGroupNameInput(groupName || '分帳記帳簿');
+		};
+
+		// 儲存名稱到 Firestore
+		const saveGroupName = async () => {
+		  if (!db || !currentCollectionId) return;
+		  if (isReadOnly) return;
+
+		  const trimmed = (groupNameInput || '').trim() || '未命名記帳簿';
+
+		  try {
+			setIsLoading(true);
+			setError(null);
+
+			const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
+			await groupRef.set(
+			  {
+				name: trimmed,
+			  },
+			  { merge: true }
+			);
+
+			setGroupName(trimmed);
+			setGroupNameInput(trimmed);
+			setIsEditingGroupName(false);
+		  } catch (e) {
+			console.error('saveGroupName error:', e);
+			setError(`更新紀錄簿名稱失敗：${e.message}`);
+		  } finally {
+			setIsLoading(false);
+		  }
+		};
 
 		// --- Firestore 路徑 helper ---
 		const getGroupExpensesPath = (groupId) =>
@@ -1782,20 +1835,87 @@
             <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
               <div className="max-w-4xl mx-auto">
                 {/* 標題和主要操作按鈕 */}
-                <header className="py-6 border-b border-gray-200">
-                  <h1 className="text-4xl font-extrabold text-primaryColor-700 flex items-center">
-                    <Pencil className="w-10 h-10 mr-3" />
-                    分帳記帳簿
-                  </h1>
-				  {lastExchangeUpdate && (
-					<p className="text-xs text-gray-500 mt-1">
-					  匯率最後更新：{new Date(lastExchangeUpdate).toLocaleString('zh-TW')}
+				<header className="py-6 border-b border-gray-200">
+				  <div className="flex flex-col gap-2">
+					<div className="flex items-center gap-3">
+					  <Pencil className="w-10 h-10 text-primaryColor-700" />
+					  
+					  {isEditingGroupName && !isReadOnly ? (
+						<div className="flex items-center gap-2 flex-1">
+						  <input
+							type="text"
+							value={groupNameInput}
+							onChange={(e) => setGroupNameInput(e.target.value)}
+							onKeyDown={(e) => {
+							  if (e.key === 'Enter') {
+								e.preventDefault();
+								saveGroupName();
+							  } else if (e.key === 'Escape') {
+								e.preventDefault();
+								cancelEditGroupName();
+							  }
+							}}
+							className="flex-1 border-b border-primaryColor-500 bg-transparent text-3xl font-extrabold text-primaryColor-700 focus:outline-none focus:border-primaryColor-700"
+							autoFocus
+							maxLength={40}
+							placeholder="輸入這本分帳記帳簿名稱"
+						  />
+						  <button
+							type="button"
+							onClick={saveGroupName}
+							disabled={isLoading || !groupNameInput.trim()}
+							className={
+							  "px-3 py-1 rounded-lg text-sm font-semibold text-white shadow-md " +
+							  ((isLoading || !groupNameInput.trim())
+								? "bg-gray-400 cursor-not-allowed"
+								: "bg-primaryColor-600 hover:bg-primaryColor-700")
+							}
+						  >
+							儲存
+						  </button>
+						  <button
+							type="button"
+							onClick={cancelEditGroupName}
+							className="px-3 py-1 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100"
+						  >
+							取消
+						  </button>
+						</div>
+					  ) : (
+						<div className="flex flex-col">
+						  <h1
+							className={
+							  "text-4xl font-extrabold text-primaryColor-700 " +
+							  (isReadOnly ? "" : "cursor-text hover:underline decoration-dotted")
+							}
+							onClick={() => {
+							  if (!isReadOnly) {
+								startEditGroupName();
+							  }
+							}}
+							title={isReadOnly ? "" : "點擊以修改這本分帳記帳簿名稱"}
+						  >
+							{groupName || '分帳記帳簿'}
+						  </h1>
+						  {!isReadOnly && (
+							<span className="text-xs text-gray-400">
+							  （點擊上方名稱即可重新命名這本分帳記帳簿）
+							</span>
+						  )}
+						</div>
+					  )}
+					</div>
+
+					{lastExchangeUpdate && (
+					  <p className="text-xs text-gray-500">
+						匯率最後更新：{new Date(lastExchangeUpdate).toLocaleString('zh-TW')}
+					  </p>
+					)}
+					<p className="text-xs text-gray-500">
+					  預設幣別：{defaultCurrency}（依裝置 GPS 推測）
 					</p>
-				  )}
-				  <p className="text-xs text-gray-500 mt-1">
-				    預設幣別：{defaultCurrency}（依裝置 GPS 推測）
-				  </p>
-                </header>
+				  </div>
+				</header>
                 
                 {/* 錯誤訊息提示 */}
                 {error && (
