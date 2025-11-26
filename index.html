@@ -1138,7 +1138,18 @@
           const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
           const [isLoading, setIsLoading] = useState(false);
           const [error, setError] = useState(null);
-          
+        
+		// 錯誤訊息自動消失
+		useEffect(() => {
+		  if (!error) return;
+
+		  const timer = setTimeout(() => {
+			setError(null);
+		  }, 3000); // 3 秒清除
+
+		  return () => clearTimeout(timer);
+		}, [error]);
+		
           // --- 1. Firebase 初始化與驗證 ---
 		useEffect(() => {
 		  if (!firebaseConfig) {
@@ -1575,7 +1586,7 @@
 				setError(null);
 
 				try {
-				  // 1) 先從 public_profiles 找出這個 email 對應的 uid / 暱稱
+				  // 1) 用 email 找 public_profiles
 				  const profilesRef = db.collection(`artifacts/${appId}/public_profiles`);
 				  const snap = await profilesRef.where('email', '==', emailToInvite).get();
 
@@ -1594,21 +1605,26 @@
 					return;
 				  }
 
-				  // 2) 把這個 uid 加進 group.members（權限控制）
+				  // 2) 檢查是否已經是成員：如果是，提示就好，不要重複加入
+				  if (groupMembers.includes(invitedUid)) {
+					setError(`「${invitedDisplayName}」已經是這本記帳簿的成員了。`);
+					return;
+				  }
+
+				  // 3) 把 uid 加進 group.members
 				  const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
 				  await groupRef.update({
 					members: firebase.firestore.FieldValue.arrayUnion(invitedUid),
 				  });
 
-				  // 3) 把他也加入「分帳成員名單」(settings/members.list)
-				  //    這裡用 uid 當成員 ID，顯示時會透過 getDisplayName 顯示暱稱
+				  // 4) 把他也加入「分帳成員名單」（settings/members.list）
 				  let newMemberList = customMembers;
 				  if (!customMembers.includes(invitedUid)) {
 					newMemberList = [...customMembers, invitedUid];
 					await saveMembers(newMemberList);
 				  }
 
-				  // 4) 清空輸入框 & 給一點提示用戶
+				  // 5) 清空輸入框
 				  setInviteEmail('');
 				  console.log(
 					`已邀請成員 ${invitedDisplayName} (${invitedUid}) 並加入分帳成員名單`
@@ -1620,7 +1636,43 @@
 				  setIsLoading(false);
 				}
 			  },
-			  [db, currentCollectionId, customMembers, saveMembers]
+			  [db, currentCollectionId, customMembers, saveMembers, groupMembers]
+			);
+
+			// 從群組中移除成員（同時從分帳成員名單中移除）
+			// 不允許移除擁有者
+			const removeGroupMember = React.useCallback(
+			  async (memberUid) => {
+				if (!db || !currentCollectionId) return;
+				if (isReadOnly) return;
+
+				// 不允許移除 owner
+				if (memberUid === groupOwner) {
+				  setError('無法移除擁有者。如需變更，請先移轉或建立新的記帳簿。');
+				  return;
+				}
+
+				try {
+				  setIsLoading(true);
+				  setError(null);
+
+				  // 1) 從 group.members 移除
+				  const groupRef = db.doc(`artifacts/${appId}/groups/${currentCollectionId}`);
+				  await groupRef.update({
+					members: firebase.firestore.FieldValue.arrayRemove(memberUid),
+				  });
+
+				  // 2) 從分帳成員列表移除
+				  const newMemberList = customMembers.filter((id) => id !== memberUid);
+				  await saveMembers(newMemberList);
+				} catch (e) {
+				  console.error('removeGroupMember error:', e);
+				  setError(`移除成員失敗：${e.message}`);
+				} finally {
+				  setIsLoading(false);
+				}
+			  },
+			  [db, currentCollectionId, isReadOnly, groupOwner, customMembers, saveMembers]
 			);
 
           const handleDeleteMember = useCallback(async (nameToDelete) => {
@@ -1954,7 +2006,7 @@
 					共享成員（可編輯這本記帳簿）
 				  </h2>
 				  <p className="text-xs text-gray-500 mb-3">
-					輸入對方「在此系統登入用的 Email」，將他加入這本記帳簿的成員。只有成員可以新增 / 編輯 / 刪除支出。
+					請輸入對方「在此系統登入用的 Email」。只有成員可以新增 / 編輯 / 刪除支出。
 				  </p>
 
 				  <div className="flex flex-col sm:flex-row gap-2">
@@ -1990,27 +2042,40 @@
 				  </div>
 
 				  <div className="mt-3 text-xs text-gray-600">
-					<p className="font-semibold mb-1">目前有編輯權限的成員（依照登入 Email 對應的帳號）：</p>
+					<p className="font-semibold mb-1">目前有編輯權限的成員：</p>
 					{groupMembers.length === 0 ? (
 					  <p className="text-gray-400">尚無成員（只有你自己）。</p>
 					) : (
-					  <ul className="list-disc list-inside space-y-1">
-						{groupMembers.map((uid) => (
-						  <li key={uid}>
-							{getDisplayName(uid)}
-							{uid === groupOwner && (
-							  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
-								（擁有者）
-							  </span>
-							)}
-							{uid === userId && (
-							  <span className="ml-1 text-[11px] text-green-600 font-semibold">
-								（你）
-							  </span>
-							)}
-						  </li>
-						))}
-					  </ul>
+						<ul className="space-y-1">
+						  {groupMembers.map((uid) => (
+							<li key={uid} className="flex items-center justify-between">
+							  <div className="text-sm">
+								{getDisplayName(uid)}
+								{uid === groupOwner && (
+								  <span className="ml-1 text-[11px] text-primaryColor-600 font-semibold">
+									（擁有者）
+								  </span>
+								)}
+								{uid === userId && (
+								  <span className="ml-1 text-[11px] text-green-600 font-semibold">
+									（你）
+								  </span>
+								)}
+							  </div>
+
+							  {/* 只有成員、且不是 owner 時，才顯示移除按鈕 */}
+							  {!isReadOnly && uid !== groupOwner && (
+								<button
+								  type="button"
+								  onClick={() => removeGroupMember(uid)}
+								  className="ml-2 px-2 py-1 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
+								>
+								  移除
+								</button>
+							  )}
+							</li>
+						  ))}
+						</ul>
 					)}
 				  </div>
 				</div>
