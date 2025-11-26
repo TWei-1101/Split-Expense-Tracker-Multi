@@ -441,7 +441,7 @@
             );
         });
         
-        /**
+		/**
          * 支出 Modal (核心邏輯獨立)
          */
         const ExpenseModal = React.memo(({ db, currentUserId, members, getInitialShares, state, onClose, getDisplayName, isReadOnly, collectionId, liveExchangeRates, defaultCurrency, currentUserLabel}) => {
@@ -611,12 +611,16 @@
             if (!state.isOpen) return null;
 
             return (
+              // 修正：Modal 容器使用 h-screen 確保佔滿整個視埠，並設定頂部對齊 (items-start)
               <div 
                 key={isEditing && expenseToEdit ? expenseToEdit.id : 'add-new'} 
-                className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start sm:items-center justify-center p-4 pt-8 z-50 transition-opacity"
+                className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-start justify-center p-4 z-50 transition-opacity overflow-y-auto"
               >
-                <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl transform transition-transform duration-300 scale-100 max-h-[90vh] flex flex-col">
-                  <div className="p-6 border-b flex justify-between items-center">
+                {/* 修正：新增 h-full 和 flex flex-col 讓內容可以獨立滾動 */}
+                <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl transform transition-transform duration-300 scale-100 my-4 h-full sm:h-auto sm:max-h-[95vh] flex flex-col">
+                  
+                  {/* 頂部：固定標題 (flex-shrink-0) */}
+                  <div className="p-6 border-b flex justify-between items-center flex-shrink-0">
                     <h3 className="text-xl font-bold text-gray-800">
                         {modalTitle} {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
                     </h3>
@@ -625,7 +629,8 @@
                     </button>
                   </div>
 
-                  <div className="p-6 space-y-5 overflow-y-auto flex-1 pb-20 sm:pb-6">
+                  {/* 中間內容：可滾動 (flex-1 overflow-y-auto) */}
+                  <div className="p-6 space-y-5 flex-1 overflow-y-auto">
                     {modalError && <p className="text-red-600 bg-red-100 p-3 rounded-lg text-sm">{modalError}</p>}
                     
                     {/* 1. 品項與金額 */}
@@ -722,7 +727,8 @@
                           [設為平均分配]
                         </button>
                       </div>
-                      <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+                      {/* 移除 max-h-48，讓 flex-1 負責滾動 */}
+                      <div className="space-y-3 pr-2">
                         {members.map(member => {
                           const currentShares = newExpense.shares[member] || 0;
                           const displayMember = getDisplayName(member);
@@ -760,7 +766,10 @@
                         })}
                       </div>
                     </div>
-					<div className="pt-6 border-t flex justify-end mt-6">
+				  </div>
+
+				  {/* 底部：固定儲存按鈕 (flex-shrink-0) */}
+				  <div className="p-6 border-t flex justify-end flex-shrink-0">
 					  <button
 					    onClick={saveExpense}
 					    disabled={isReadOnly || isLoadingModal || !newExpense.description.trim() || newExpense.originalAmount <= 0 || !newExpense.payerName}
@@ -779,13 +788,12 @@
 					    )}
 					  </button>
 				    </div>
-				  </div>
                 </div>
               </div>
             );
         });
           
-/**
+		/**
          * 成員管理 Modal (核心邏輯獨立)
          * 已移除未使用的 collectionId 參數
          */
