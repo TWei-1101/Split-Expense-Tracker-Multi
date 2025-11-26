@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>分帳記帳簿</title>
-    <!-- 引入 Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 React, ReactDOM, and Babel 獨立版 -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -43,10 +41,6 @@
 <body>
     <div id="root"></div>
 
-    <!-- 
-        重要：請在這裡填入您的 Firebase 配置！
-        注意：現在需要開啟 Firebase Authentication 的 Email/Password 登入方法
-    -->
     <script>
         // 修正：將這些變數定義在純 JS 區塊，使 Babel 腳本可以訪問
         const __app_id = "YOUR_APP_ID"; // 例如: 'my-splitwise-app-2025'
@@ -66,9 +60,6 @@
         const GEMINI_API_KEY = ""; 
     </script>
 
-    <!-- 
-        使用 Firebase v9 相容模式 (compat)
-    -->
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore-compat.js"></script>
@@ -311,21 +302,19 @@
         /**
          * 認證模態視窗
          */
-        const AuthModal = React.memo(({ auth, db }) => {
+        const AuthModal = React.memo(({ auth, db, setToastMessage }) => { 
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [nickname, setNickname] = useState('');
             const [isLogin, setIsLogin] = useState(true);
-            const [error, setError] = useState(null);
             const [isLoading, setIsLoading] = useState(false);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                setError(null);
                 setIsLoading(true);
 
                 if (!email || !password || (!isLogin && !nickname)) {
-                    setError('請輸入所有必填欄位。');
+                    setToastMessage('❌ 請輸入所有必填欄位。'); 
                     setIsLoading(false);
                     return;
                 }
@@ -347,6 +336,8 @@
                     if (db) {
                         await createOrUpdatePublicProfile(db, userCredential.user.uid, finalDisplayName, email);
                     }
+                    
+                    setToastMessage(`✅ 登入成功！歡迎 ${finalDisplayName}。`);
 
                 } catch (e) {
                     console.error("Auth error:", e.code, e.message);
@@ -360,7 +351,8 @@
                     } else if (e.code === 'auth/weak-password') {
                         displayError = '密碼強度不足，請使用至少 6 個字元。';
                     }
-                    setError(displayError);
+                    setToastMessage(`❌ 登入/註冊失敗: ${displayError}`); 
+
                 } finally {
                     setIsLoading(false);
                 }
@@ -372,7 +364,7 @@
                         <h3 className="text-3xl font-bold text-primaryColor-600 text-center mb-6">
                             {isLogin ? '登入紀錄簿' : '註冊新帳號'}
                         </h3>
-                        {error && <p className="text-red-600 bg-red-100 p-3 rounded-lg text-sm mb-4">{error}</p>}
+                        {/* 移除原本的錯誤訊息顯示區塊 */}
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {!isLogin && (
@@ -430,7 +422,7 @@
 
                         <div className="mt-6 text-center">
                             <button
-                                onClick={() => { setIsLogin(prev => !prev); setError(null); setNickname(''); }}
+                                onClick={() => { setIsLogin(prev => !prev); setToastMessage(null); setNickname(''); }}
                                 className="text-primaryColor-600 hover:text-primaryColor-800 font-medium text-sm"
                             >
                                 {isLogin ? '還沒有帳號？點此註冊' : '已經有帳號了？點此登入'}
@@ -795,11 +787,12 @@
           
 		/**
          * 成員管理 Modal (核心邏輯獨立)
-         * 已移除未使用的 collectionId 參數
          */
-        const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly, groupMembers, groupOwner, inviteUserByEmail, removeGroupMember }) => {
+        const MemberManagementModal = React.memo(({ db, currentUserId, members, customMembers, defaultSharesConfig, isMemberModalOpen, setIsMemberModalOpen, saveMembers, handleSaveDefaultShares, handleDeleteMember, setIsLoading, isLoading, setError, getDisplayName, isReadOnly, groupMembers, groupOwner, inviteUserByEmail, removeGroupMember, setToastMessage }) => { 
             const [memberInput, setMemberInput] = useState('');
             const [tempDefaultShares, setTempDefaultShares] = useState({});
+            // NEW: 內部訊息狀態
+            const [modalMessage, setModalMessage] = useState(null); 
 
             useEffect(() => {
                 if (isMemberModalOpen) {
@@ -810,15 +803,26 @@
                     }, {});
                     setTempDefaultShares(initialShares);
                     setMemberInput('');
+                    setModalMessage(null); // NEW: 開啟時清除訊息
                 }
             }, [isMemberModalOpen, members, defaultSharesConfig]);
             
+            // NEW: 內部訊息清除 (防止無限迴圈)
+            const resetMessage = useCallback(() => {
+                setModalMessage(null);
+            }, []);
+
 			
 			// 只處理「一般成員名稱」→ 加到分帳成員名單
 			const handleAddMemberByName = async (name) => {
-			  if (isReadOnly) return setError('唯讀模式下無法新增成員。');
+			  if (isReadOnly) {
+                setModalMessage('❌ 唯讀模式下無法新增成員。'); 
+                return;
+              }
 
 			  const trimmedName = name.trim();
+              setModalMessage(null); // 清除舊訊息
+
 			  if (
 				trimmedName &&
 				trimmedName !== currentUserId &&
@@ -826,24 +830,29 @@
 			  ) {
 				const newMemberList = [...customMembers, trimmedName];
 				await saveMembers(newMemberList);
+                setModalMessage(`✅ 已新增分帳成員: ${trimmedName}`); 
 			  } else if (trimmedName === currentUserId) {
-				setError('不能將自己的用戶 ID 新增為成員。');
-			  }
+				setModalMessage('❌ 不能將自己的用戶 ID 新增為成員。'); 
+			  } else if (customMembers.includes(trimmedName)) {
+                setModalMessage(`⚠️ 成員 ${trimmedName} 已存在於分帳清單。`); 
+              }
 			};
 
 			// 共用：判斷是名稱還是 Email
 			const handleSubmitMemberInput = async () => {
 			  if (isReadOnly) {
-				setError('唯讀模式下無法新增或邀請成員。');
+				setModalMessage('❌ 唯讀模式下無法新增或邀請成員。'); 
 				return;
 			  }
 
 			  const input = memberInput.trim();
 			  if (!input) return;
 
+              setModalMessage(null); // 清除舊訊息
+
 			  if (input.includes('@')) {
 				// Email → 邀請共享成員
-				await inviteUserByEmail(input);
+				await inviteUserByEmail(input, setModalMessage); // 傳遞 setModalMessage
 			  } else {
 				// 一般成員名稱
 				await handleAddMemberByName(input);
@@ -874,8 +883,15 @@
             };
             
             const handleMemberDeleteWrapper = async (member) => {
-                if (isReadOnly) return setError('唯讀模式下無法刪除成員。');
-                await handleDeleteMember(member);
+                if (isReadOnly) {
+                    setModalMessage('❌ 唯讀模式下無法刪除成員。'); 
+                    return;
+                }
+                await handleDeleteMember(member, setModalMessage); // 傳遞 setModalMessage
+            };
+            
+            const handleSaveDefaultSharesWrapper = async (tempShares) => {
+                await handleSaveDefaultShares(tempShares, setModalMessage); // 傳遞 setModalMessage
             };
 
             if (!isMemberModalOpen) return null;
@@ -897,6 +913,13 @@
                       
                       {/* 修正：中間內容：可滾動 (flex-1 overflow-y-auto) */}
                       <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+                            {/* NEW: 內部訊息顯示區 */}
+                            {modalMessage && (
+                                <div className={`p-3 rounded-lg text-sm font-semibold ${modalMessage.startsWith('❌') ? 'bg-red-100 text-red-700' : (modalMessage.startsWith('⚠️') ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700')}`}>
+                                    {modalMessage}
+                                </div>
+                            )}
+
 							{/* 成員管理 + 共享權限（合併版） */}
 							<div className="border p-4 rounded-lg bg-gray-50 flex-shrink-0">
 							  <h4 className="font-semibold text-lg mb-2 flex items-center text-primaryColor-700">
@@ -935,7 +958,7 @@
 							  </div>
 
 							  <p className="text-xs text-gray-500 mb-3">
-								以Email加入，為可編輯成員。
+								以名稱加入，為一般成員；以Email加入，為可編輯成員。
 							  </p>
 
 							  {/* 目前有編輯權限的成員列表 */}
@@ -963,7 +986,7 @@
 										{!isReadOnly && uid !== groupOwner && (
 										  <button
 											type="button"
-											onClick={() => removeGroupMember(uid)}
+											onClick={() => removeGroupMember(uid, setModalMessage)} // 傳遞 setModalMessage
 											className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
 										  >
 											移除
@@ -1042,7 +1065,7 @@
                       {/* 底部：固定儲存按鈕 (flex-shrink-0) */}
                       <div className="p-6 border-t flex justify-end flex-shrink-0">
                           <button
-                              onClick={() => handleSaveDefaultShares(tempDefaultShares)}
+                              onClick={() => handleSaveDefaultSharesWrapper(tempDefaultShares)}
                               disabled={isLoading || isReadOnly}
                               className={
                                 "flex items-center px-6 py-3 rounded-full text-white font-semibold transition hover:scale-105 transform duration-150 shadow-md " +
@@ -1627,9 +1650,9 @@
           }, [db, currentCollectionId, isReadOnly, members, defaultSharesConfig]);
 
 			// 透過 email 邀請使用者加入這個群組（有編輯權）
-			// 並且自動把成員加入「管理分帳成員與預設份數」的名單
+			// NEW: 傳入 setModalMessage
 			const inviteUserByEmail = React.useCallback(
-			  async (emailToInviteRaw) => {
+			  async (emailToInviteRaw, setModalMessage) => { 
 				if (!db || !currentCollectionId) return;
 				const emailToInvite = (emailToInviteRaw || '').trim().toLowerCase();
 				if (!emailToInvite) return;
@@ -1643,7 +1666,7 @@
 				  const snap = await profilesRef.where('email', '==', emailToInvite).get();
 
 				  if (snap.empty) {
-					setError('找不到使用這個 Email 註冊的帳號，請對方先在這個系統登入一次。');
+					setModalMessage('❌ 找不到使用這個 Email 註冊的帳號，請對方先在這個系統登入一次。'); // 使用 Modal Message
 					return;
 				  }
 
@@ -1653,13 +1676,13 @@
 					profileData.displayName || profileData.nickname || emailToInvite;
 
 				  if (!invitedUid) {
-					setError('這個 Email 的使用者資料異常，請稍後再試。');
+					setError('這個 Email 的使用者資料異常，請稍後再試。'); 
 					return;
 				  }
 
 				  // 2) 檢查是否已經是成員：如果是，提示就好，不要重複加入
 				  if (groupMembers.includes(invitedUid)) {
-					setError(`「${invitedDisplayName}」已經是這本記帳簿的成員了。`);
+					setModalMessage(`❌ 「${invitedDisplayName}」已經是這本記帳簿的成員了。`); // 使用 Modal Message
 					return;
 				  }
 
@@ -1676,14 +1699,15 @@
 					await saveMembers(newMemberList);
 				  }
 
-				  // 5) 清空輸入框
+				  // 5) 清空輸入框 and Success Message
 				  setInviteEmail('');
+				  setModalMessage(`✅ 已成功邀請成員: ${invitedDisplayName}`); // 成功 Modal Message
 				  console.log(
 					`已邀請成員 ${invitedDisplayName} (${invitedUid}) 並加入分帳成員名單`
 				  );
 				} catch (e) {
 				  console.error('inviteUserByEmail error:', e);
-				  setError(`邀請成員失敗: ${e.message}`);
+				  setError(`邀請成員失敗: ${e.message}`); 
 				} finally {
 				  setIsLoading(false);
 				}
@@ -1692,9 +1716,9 @@
 			);
 
 			// 從群組中移除成員（同時從分帳成員名單中移除）
-			// 使用 confirm modal，而不是 window.confirm
+			// NEW: 傳入 setModalMessage，讓移除成功的訊息顯示在 Modal 內部
 			const removeGroupMember = React.useCallback(
-			  (memberUid) => {
+			  (memberUid, setModalMessage) => {
 				if (isReadOnly) return;
 
 				// 不允許移除 owner
@@ -1718,6 +1742,7 @@
 					// 2) 從分帳成員列表移除
 					const newMemberList = customMembers.filter(id => id !== memberUid);
 					await saveMembers(newMemberList);
+                    if (setModalMessage) setModalMessage(`🗑️ 已移除共享成員: ${getDisplayName(memberUid)}`);
 
 				  } catch (e) {
 					console.error('removeGroupMember error:', e);
@@ -1748,13 +1773,15 @@
 			  ]
 			);
 
-          const handleDeleteMember = useCallback(async (nameToDelete) => {
+          // NEW: 讓 handleDeleteMember 回傳訊息給 Modal
+          const handleDeleteMember = useCallback(async (nameToDelete, setModalMessage) => {
             if (isReadOnly) return;
             
             const onConfirm = async () => {
                 closeConfirmModal();
                 const newMemberList = customMembers.filter(name => name !== nameToDelete);
                 await saveMembers(newMemberList);
+                if (setModalMessage) setModalMessage(`🗑️ 已從分帳清單移除: ${getDisplayName(nameToDelete)}`);
             };
 
             openConfirmModal(
@@ -1765,7 +1792,8 @@
 
           }, [customMembers, saveMembers, isReadOnly, openConfirmModal, closeConfirmModal, getDisplayName]);
 
-          const handleSaveDefaultShares = useCallback(async (tempShares) => {
+          // NEW: 讓 handleSaveDefaultShares 回傳訊息給 Modal
+          const handleSaveDefaultShares = useCallback(async (tempShares, setModalMessage) => {
             if (isReadOnly) return;
             if (!db) return;
 
@@ -1787,6 +1815,7 @@
                 
                 await membersDocRef.set({ list: customMembers, defaultShares: sharesToSave }, { merge: false });
                 setIsMemberModalOpen(false);
+                if (setModalMessage) setModalMessage(`✅ 預設份數已儲存！`);
             } catch (e) {
                 console.error("Error saving default shares:", e);
                 setError(`儲存預設份數失敗: ${e.message}`);
@@ -1826,7 +1855,7 @@
                           creatorId: userId,
                           appId: appId,
                       });
-                      
+                      setToastMessage(`✅ 已新增結清記錄 TWD ${roundedAmount.toFixed(0)}！`); // 結算成功 Toast
                   } catch (e) {
                       console.error("Error settling debt: ", e);
                       setError(`結算失敗: ${e.message}`);
@@ -1923,6 +1952,15 @@
           }, [calculateBalances]); 
 
           // --- 10. UI 輔助 ---
+          // NEW: 通用 Toast 訊息設定函式 (包含定時清除)
+          const setToastMessage = React.useCallback((message) => {
+            setCopyMessage(message); 
+            if (message) {
+                // 設定 4 秒後自動清除
+                setTimeout(() => setCopyMessage(''), 4000); 
+            }
+          }, []); 
+
           const getDisplayName = useCallback((memberId) => {
             if (userProfiles[memberId]) {
                 return userProfiles[memberId];
@@ -1963,23 +2001,19 @@
 			const handleCopyShareLink = React.useCallback(() => {
 			  if (!userId || !currentCollectionId || !currentCollectionShortCode) return;
 
-			  // 1. 獲取網址的基本路徑
+			  // 修正為複製短代碼路徑連結
 			  const url = new URL(window.location.href);
 			  let rootPath = url.pathname;
 			  const marker = '/g/';
 			  const idx = rootPath.indexOf(marker);
-			  
-			  // 移除路徑中可能存在的 /g/SHORT_CODE 部分
 			  if (idx !== -1) {
 				rootPath = rootPath.slice(0, idx);
 			  }
 			  if (!rootPath.endsWith('/')) {
 				rootPath = rootPath + '/';
 			  }
-
-			  // 2. 組裝新的短代碼分享連結
-			  // 格式：您的網域/g/短代碼
-			  const shareUrl = `${window.location.origin}${rootPath}g/${currentCollectionShortCode}`; // 複製短代碼連結！
+			  // 組裝新的短代碼分享連結
+			  const shareUrl = `${window.location.origin}${rootPath}g/${currentCollectionShortCode}`;
 
 			  const tempInput = document.createElement('textarea');
 			  tempInput.value = shareUrl;
@@ -1988,15 +2022,14 @@
 
 			  try {
 				document.execCommand('copy');
-				setCopyMessage('✨ 分享連結已複製！');
+				setToastMessage('✨ 分享連結已複製！');
 			  } catch (err) {
 				console.error('無法複製連結', err);
-				setCopyMessage('複製失敗，請手動複製網址。');
+				setToastMessage('複製失敗，請手動複製網址。');
 			  }
 
 			  document.body.removeChild(tempInput);
-			  setTimeout(() => setCopyMessage(''), 4000);
-			}, [userId, currentCollectionId, currentCollectionShortCode]); // 確保 currentCollectionShortCode 加入依賴項
+			}, [userId, currentCollectionId, currentCollectionShortCode, setToastMessage]);
 
 			// 返回自己的記帳簿（加入 confirm modal）
 			const handleReturnToOwn = React.useCallback(() => {
@@ -2083,7 +2116,7 @@
           }
           
           if (!userId || !auth) {
-            return <AuthModal auth={auth} db={db} />;
+            return <AuthModal auth={auth} db={db} setToastMessage={setToastMessage} />;
           }
 
 		  return (
@@ -2207,7 +2240,7 @@
 				  </div>
 				</header>
                 
-                {/* 錯誤訊息提示 */}
+                {/* 錯誤訊息提示 (App層級) */}
                 {error && (
                     <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
                         <p className="font-semibold">錯誤提示:</p>
@@ -2215,7 +2248,7 @@
                     </div>
                 )}
                 
-                {/* 新增：複製連結成功或失敗的訊息提示 (Toast 效果) */}
+                {/* NEW: 複製連結成功或失敗的訊息提示 (Toast 效果) - 保持全域，用於登入/登出/複製 */}
                 {copyMessage && (
                     <div className="fixed top-4 left-1/2 transform -translate-x-1/2 p-3 bg-primaryColor-600 text-white rounded-lg shadow-xl z-50 transition-opacity duration-300">
                         <p className="font-semibold text-sm">{copyMessage}</p>
@@ -2309,6 +2342,7 @@
 					groupOwner={groupOwner}
 					inviteUserByEmail={inviteUserByEmail}
 					removeGroupMember={removeGroupMember}
+                    setToastMessage={setToastMessage}
                 />
                 
                 {/* 統一的確認提示 Modal */}
