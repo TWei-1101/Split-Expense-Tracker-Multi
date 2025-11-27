@@ -91,7 +91,9 @@
 		  `artifacts/${appId}/groups/${groupId}/settings/members`;
 		
         // --- 匯率設定 (預設值作為備用) ---
-        const DEFAULT_EXCHANGE_RATES = {
+        const PERMANENT_RATES_CACHE_KEY = "permanentExchangeRates";
+
+        const HARDCODED_DEFAULT_RATES = {
             'TWD': 1.0,   // 基準貨幣：臺幣
             'USD': 30.5,  // 美金
             'THB': 0.85,  // 泰銖
@@ -104,6 +106,19 @@
             'AUD': 20.0,  // 澳幣
             'NOK': 2.9,   // 挪威克朗
         };
+
+        // ✨ MODIFIED: 嘗試從持久化快取讀取預設值
+        let DEFAULT_EXCHANGE_RATES = (function() {
+            try {
+                const cachedRates = localStorage.getItem(PERMANENT_RATES_CACHE_KEY);
+                if (cachedRates) {
+                    return JSON.parse(cachedRates);
+                }
+            } catch (e) {
+                console.warn("⚠ 讀取持久化匯率快取失敗，使用硬編碼預設值。", e);
+            }
+            return HARDCODED_DEFAULT_RATES;
+        })();
 		
 		// --- 國家 -> 貨幣 對照表（給 GPS 用） ---
 		const COUNTRY_CURRENCY_MAP = {
@@ -127,7 +142,7 @@
 			PT: 'EUR',
 		};
 		
-        const CURRENCIES = Object.keys(DEFAULT_EXCHANGE_RATES);
+        const CURRENCIES = Object.keys(HARDCODED_DEFAULT_RATES); // 幣別列表仍使用硬編碼的 Key
         const DEFAULT_CURRENCY = 'TWD';
 
         // --- 匯率獲取函式：每 4 小時更新一次 + 可顯示更新時間 ---
@@ -136,7 +151,7 @@
 			const CACHE_TIME_KEY = "exchangeRatesCacheTime";
 			const FOUR_HOURS = 4 * 60 * 60 * 1000;
 
-			// 1. 從 localStorage 讀取快取
+			// 1. 從 localStorage 讀取臨時快取
 			try {
 				const cachedRates = localStorage.getItem(CACHE_KEY);
 				const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
@@ -145,9 +160,9 @@
 					const lastUpdate = parseInt(cachedTime, 10);
 					const now = Date.now();
 
-					// 少於 4 小時 → 使用快取
+					// 少於 4 小時 → 使用臨時快取
 					if (now - lastUpdate < FOUR_HOURS) {
-						console.log("📦 使用快取匯率（4 小時內）");
+						console.log("📦 使用臨時快取匯率（4 小時內）");
 
 						return {
 							rates: JSON.parse(cachedRates),
@@ -156,7 +171,7 @@
 					}
 				}
 			} catch (err) {
-				console.warn("⚠ 讀取匯率快取失敗，將重新抓取。", err);
+				console.warn("⚠ 讀取臨時匯率快取失敗，將重新抓取。", err);
 			}
 
 			// 2. 超過 4 小時 → 抓取新資料
@@ -178,7 +193,8 @@
 					if (typeof rateTWDToCode === "number" && rateTWDToCode > 0) {
 						processedRates[code] = 1 / rateTWDToCode; // 1 {code} = ? TWD
 					} else {
-						processedRates[code] = DEFAULT_EXCHANGE_RATES[code];
+                        // 如果 API 沒給，使用硬編碼預設值
+						processedRates[code] = HARDCODED_DEFAULT_RATES[code];
 					}
 				});
 
@@ -188,6 +204,10 @@
 				try {
 					localStorage.setItem(CACHE_KEY, JSON.stringify(processedRates));
 					localStorage.setItem(CACHE_TIME_KEY, now.toString());
+                    // ✨ NEW: 寫入永久備用快取
+                    localStorage.setItem(PERMANENT_RATES_CACHE_KEY, JSON.stringify(processedRates));
+                    // 更新全域 DEFAULT_EXCHANGE_RATES 變數
+                    DEFAULT_EXCHANGE_RATES = processedRates;
 				} catch (err) {
 					console.warn("⚠️ 無法寫入快取（可能是無痕模式）", err);
 				}
@@ -204,7 +224,8 @@
 				const fallbackTime = Date.now();
 
 				return {
-					rates: DEFAULT_EXCHANGE_RATES,
+					// 使用持久化或硬編碼的 DEFAULT_EXCHANGE_RATES
+					rates: DEFAULT_EXCHANGE_RATES, 
 					lastUpdate: fallbackTime
 				};
 			}
@@ -2242,7 +2263,6 @@
 							  title={isReadOnly ? "" : "點擊以修改這本分帳記帳簿名稱"}
 							>
 							  {groupName || '分帳記帳簿'}
-							兩個
 							</h1>
 						  </div>
 						)}
@@ -2293,48 +2313,48 @@
 				</header>
                 
                 {/* ✨ MODIFIED: 頂部匯率換算器 - 放在 header 之後，功能按鈕之前 */}
-                <div className="mt-4 p-4 bg-white rounded-xl shadow-lg border-b border-primaryColor-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <span className="font-semibold text-gray-700 flex-shrink-0">即時換算:</span>
-                    <div className="flex items-center gap-2 w-full sm:w-auto flex-1">
-                        {/* 來源幣別選擇框 (左邊 - 需記錄) */}
-                        <select
-                            value={converterSourceCurrency}
-                            onChange={(e) => setConverterSourceCurrency(e.target.value)}
-                            className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white"
-                        >
-                            {CURRENCIES.map(code => (
-                                <option key={`source-${code}`} value={code}>{code}</option>
-                            ))}
-                        </select>
-                        {/* 金額輸入框 */}
-                        <input
-                            type="number"
-                            value={converterAmount}
-                            onChange={(e) => setConverterAmount(e.target.value)}
-                            placeholder="輸入金額"
-                            className="block w-full sm:w-32 border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                        />
-                    </div>
-                    
-                    {/* 輸出結果 */}
-                    <div className="flex items-center space-x-1 sm:ml-4 flex-shrink-0 mt-2 sm:mt-0">
-                        <span className="text-gray-500 text-sm">→ 換算至</span>
-                        {/* 目標幣別選擇框 (右邊 - 預設 TWD, 不記錄) */}
-                        <select
-                            value={converterTargetCurrency}
-                            onChange={(e) => setConverterTargetCurrency(e.target.value)}
-                            className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white font-bold"
-                        >
-                            {CURRENCIES.map(code => (
-                                <option key={`target-${code}`} value={code}>{code}</option>
-                            ))}
-                        </select>
-                        <span className="text-xl font-bold text-primaryColor-600">
-                            {convertedAmount.toLocaleString('zh-TW')}
-                        </span>
-                    </div>
-                </div>
-
+				<div className="mt-4 p-4 bg-white rounded-xl shadow-lg border-b border-primaryColor-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+					<span className="font-semibold text-gray-700 flex-shrink-0"></span>
+					<div className="flex items-center gap-2 w-full sm:w-auto flex-1">
+						{/* 來源幣別選擇框 (左邊 - 需記錄) */}
+						<select
+							value={converterSourceCurrency}
+							onChange={(e) => setConverterSourceCurrency(e.target.value)}
+							className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white"
+						>
+							{CURRENCIES.map(code => (
+								<option key={`source-${code}`} value={code}>{code}</option>
+							))}
+						</select>
+						{/* 金額輸入框 - ✨ MODIFIED: 移除 w-full，改為 max-w-[100px] 限制最大寬度 */}
+						<input
+							type="number"
+							value={converterAmount}
+							onChange={(e) => setConverterAmount(e.target.value)}
+							placeholder="金額"
+							// ✨ 更改: w-auto 讓其自然縮小，並用 max-w-[100px] 限制最大寬度
+							className="block w-auto max-w-[100px] border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500"
+						/>
+					</div>
+					
+					{/* 輸出結果 */}
+					<div className="flex items-center space-x-1 sm:ml-4 flex-shrink-0 mt-2 sm:mt-0">
+						<span className="text-gray-500 text-sm">→ 換算至</span>
+						{/* 目標幣別選擇框 (右邊 - 預設 TWD, 不記錄) */}
+						<select
+							value={converterTargetCurrency}
+							onChange={(e) => setConverterTargetCurrency(e.target.value)}
+							className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white font-bold"
+						>
+							{CURRENCIES.map(code => (
+								<option key={`target-${code}`} value={code}>{code}</option>
+							))}
+						</select>
+						<span className="text-xl font-bold text-primaryColor-600">
+							{convertedAmount.toLocaleString('zh-TW')}
+						</span>
+					</div>
+				</div>
 
                 {/* 錯誤訊息提示 (App層級) */}
                 {error && (
@@ -2605,8 +2625,8 @@
                 <h2 className="text-2xl font-bold mb-4 text-gray-800 flex items-center">
                   <Users className="w-7 h-7 mr-3 text-primaryColor-500" />
                   結餘總結 
-                </h2
->
+                </h2>
+
                 {settlements.length === 0 ? (
                     <p className="text-lg font-medium text-green-600 p-3 bg-green-50 rounded-lg">🎉 所有帳目已結清！</p>
                 ) : (
