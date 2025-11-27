@@ -2312,11 +2312,13 @@
 				  </div>
 				</header>
                 
-                {/* ✨ MODIFIED: 頂部匯率換算器 - 放在 header 之後，功能按鈕之前 */}
-				<div className="mt-4 p-4 bg-white rounded-xl shadow-lg border-b border-primaryColor-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-					<span className="font-semibold text-gray-700 flex-shrink-0"></span>
-					<div className="flex items-center gap-2 w-full sm:w-auto flex-1">
-						{/* 來源幣別選擇框 (左邊 - 需記錄) */}
+				{/* ✨ MODIFIED: 頂部匯率換算器 - 放在 header 之後，功能按鈕之前 */}
+				<div className="mt-4 p-4 bg-white rounded-xl shadow-lg border-b border-primaryColor-100 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+					
+					{/* 1. 標籤與輸入組 */}
+					<div className="flex items-center gap-2 flex-grow min-w-0"> 
+						<span className="font-semibold text-gray-700 flex-shrink-0 text-sm"></span>
+						{/* 來源幣別選擇框 (左邊) */}
 						<select
 							value={converterSourceCurrency}
 							onChange={(e) => setConverterSourceCurrency(e.target.value)}
@@ -2326,21 +2328,21 @@
 								<option key={`source-${code}`} value={code}>{code}</option>
 							))}
 						</select>
-						{/* 金額輸入框 - ✨ MODIFIED: 移除 w-full，改為 max-w-[100px] 限制最大寬度 */}
+						{/* 金額輸入框 - 保持寬度限制並移除 w-full */}
 						<input
 							type="number"
 							value={converterAmount}
 							onChange={(e) => setConverterAmount(e.target.value)}
 							placeholder="金額"
-							// ✨ 更改: w-auto 讓其自然縮小，並用 max-w-[100px] 限制最大寬度
+							// ✨ 更改: w-auto max-w-[100px] 確保不會佔滿剩餘空間
 							className="block w-auto max-w-[100px] border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500"
 						/>
 					</div>
 					
-					{/* 輸出結果 */}
-					<div className="flex items-center space-x-1 sm:ml-4 flex-shrink-0 mt-2 sm:mt-0">
+					{/* 2. 輸出結果 - 確保在最右邊，並在空間不足時換行 */}
+					<div className="flex items-center space-x-1 flex-shrink-0 ml-auto sm:ml-0">
 						<span className="text-gray-500 text-sm">→ 換算至</span>
-						{/* 目標幣別選擇框 (右邊 - 預設 TWD, 不記錄) */}
+						{/* 目標幣別選擇框 (右邊) */}
 						<select
 							value={converterTargetCurrency}
 							onChange={(e) => setConverterTargetCurrency(e.target.value)}
