@@ -250,6 +250,8 @@
         const LogOut = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg>;
         const RefreshCw = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.76 2.91L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.76-2.91L21 16"></path><path d="M21 21v-5h-5"></path></svg>;
         const Share2 = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"></line><line x1="15.42" x2="8.59" y1="6.51" y2="10.49"></line></svg>;
+        // ✨ NEW: 放大鏡圖標 (Search)
+        const Search = (props) => <svg {...props} {...IconProps} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" x2="16.65" y1="21" y2="16.65"></line></svg>;
         // --- 圖標元件結束 ---
 
         /**
@@ -1118,6 +1120,9 @@
 		  const [groupName, setGroupName] = useState('分帳記帳簿');     // 顯示在上方標題的名稱
 		  const [isEditingGroupName, setIsEditingGroupName] = useState(false); 
 		  const [groupNameInput, setGroupNameInput] = useState('分帳記帳簿'); // 編輯時使用
+          
+          // ✨ NEW: 搜尋關鍵字狀態
+          const [searchKeyword, setSearchKeyword] = useState('');
 
           const [expenses, setExpenses] = useState([]);
           const [customMembers, setCustomMembers] = useState([]); 
@@ -2309,6 +2314,9 @@
                     formatTimestamp={formatTimestamp}
                     isReadOnly={isReadOnly}
                     clearAllExpenses={clearAllExpenses}
+                    // ✨ 新增搜尋相關 props
+                    searchKeyword={searchKeyword}
+                    setSearchKeyword={setSearchKeyword}
                 />
 
                 {/* Modal 區塊 */}
@@ -2371,34 +2379,76 @@
         };
         
         // --- 獨立的列表和總結組件 ---
-        const ExpenseList = React.memo(({ expenses, deleteExpense, startEdit, isLoading, getDisplayName, formatTimestamp, isReadOnly, clearAllExpenses }) => {
+        const ExpenseList = React.memo(({ expenses, deleteExpense, startEdit, isLoading, getDisplayName, formatTimestamp, isReadOnly, clearAllExpenses, searchKeyword, setSearchKeyword }) => { // ✨ 接受搜尋相關 props
             const sortedExpenses = useMemo(() => {
-                return [...expenses].sort((a, b) => {
+                // 1. Sort by timestamp
+                const sorted = [...expenses].sort((a, b) => {
                     const timeA = a.timestamp ? a.timestamp.getTime() : 0;
                     const timeB = b.timestamp ? b.timestamp.getTime() : 0;
                     return timeB - timeA;
                 });
-            }, [expenses]);
+                
+                // 2. Filter by searchKeyword (case-insensitive on description)
+                if (!searchKeyword.trim()) {
+                    return sorted;
+                }
+                
+                const lowerCaseKeyword = searchKeyword.toLowerCase();
+                
+                return sorted.filter(exp => 
+                    (exp.description || '').toLowerCase().includes(lowerCaseKeyword)
+                );
+                
+            }, [expenses, searchKeyword]); // ✨ 依賴 searchKeyword
               
             return (
               <div className="mt-8">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                     <CircleDollarSign className="w-7 h-7 mr-3 text-primaryColor-500" /> 
-                    所有支出 ({sortedExpenses.length})
+                    所有支出 ({expenses.length})
                   </h2>
-                  <button
-                      onClick={clearAllExpenses}
-                      disabled={isLoading || isReadOnly || sortedExpenses.length === 0}
-                      className="px-3 py-1.5 text-sm rounded-lg text-white bg-red-500 hover:bg-red-600 transition hover:scale-105 transform shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
-                  >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      清除所有資料
-                  </button>
+                  
+                  {/* ✨ NEW: 搜尋欄位與清除按鈕 */}
+                  <div className="flex items-center space-x-2">
+                    {/* 搜尋欄位 (小螢幕時自動隱藏文字並縮小) */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={searchKeyword}
+                        onChange={(e) => setSearchKeyword(e.target.value)}
+                        placeholder="" 
+                        // w-10 是為了在沒有輸入時只顯示放大鏡和圓形，focus 時展開
+                        className="w-10 sm:w-48 border border-gray-300 rounded-full h-10 py-2 pl-10 pr-4 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 transition-all duration-300 focus:w-48 sm:focus:w-64"
+                        aria-label="搜尋支出"
+                      />
+                      <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                    
+                    {/* 清除所有資料按鈕 */}
+                    <button
+                        onClick={clearAllExpenses}
+                        disabled={isLoading || isReadOnly || expenses.length === 0}
+                        className="px-3 py-1.5 text-sm rounded-lg text-white bg-red-500 hover:bg-red-600 transition hover:scale-105 transform shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
+                    >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        清除所有資料
+                    </button>
+                  </div>
+                  
                 </div>
                 
+                {/* 顯示搜尋結果數量提示 */}
+                {searchKeyword.trim() !== '' && expenses.length > sortedExpenses.length && (
+                    <p className="text-sm text-gray-600 mb-4 italic p-2 bg-gray-100 rounded-lg">
+                        🔍 顯示 {sortedExpenses.length} 筆符合「{searchKeyword}」的結果 (總計 {expenses.length} 筆)。
+                    </p>
+                )}
+                
                 {sortedExpenses.length === 0 ? (
-                  <p className="text-gray-500 italic p-4 bg-white rounded-xl shadow-inner">目前沒有任何支出記錄。</p>
+                  <p className="text-gray-500 italic p-4 bg-white rounded-xl shadow-inner">
+                    {searchKeyword.trim() ? `找不到任何符合「${searchKeyword}」的支出記錄。` : '目前沒有任何支出記錄。'}
+                  </p>
                 ) : (
                   <div className="space-y-4">
                     {sortedExpenses.map((exp) => {
