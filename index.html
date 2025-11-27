@@ -1124,6 +1124,22 @@
           // ✨ NEW: 搜尋關鍵字狀態
           const [searchKeyword, setSearchKeyword] = useState('');
 
+          // ✨ MODIFIED: 匯率換算器狀態 (Source and Target)
+          const initialConverterSourceCurrency = localStorage.getItem('lastConverterSourceCurrency') || DEFAULT_CURRENCY;
+          // 左邊幣值 (Source): 讀取 localStorage 或預設 TWD
+          const [converterSourceCurrency, setConverterSourceCurrency] = useState(initialConverterSourceCurrency); 
+          // 右邊幣值 (Target): 預設 TWD，不讀取 localStorage
+          const [converterTargetCurrency, setConverterTargetCurrency] = useState(DEFAULT_CURRENCY); 
+          const [converterAmount, setConverterAmount] = useState('');
+
+          // --- 0. 匯率換算器來源幣別持久化 ---
+          // 只有 Source Currency (左邊) 需要記錄
+          useEffect(() => {
+              if (converterSourceCurrency) {
+                  localStorage.setItem('lastConverterSourceCurrency', converterSourceCurrency);
+              }
+          }, [converterSourceCurrency]);
+
           const [expenses, setExpenses] = useState([]);
           const [customMembers, setCustomMembers] = useState([]); 
           const [defaultSharesConfig, setDefaultSharesConfig] = useState({}); 
@@ -2005,6 +2021,29 @@
             });
           };
 
+          // --- 計算換算結果 ---
+          const convertedAmount = useMemo(() => {
+              const amount = parseFloat(converterAmount) || 0;
+              if (amount <= 0) return 0;
+
+              // Step 1: Convert source amount to TWD
+              const rateToTWD = liveExchangeRates[converterSourceCurrency] || 1.0;
+              const amountInTWD = amount * rateToTWD;
+
+              // Step 2: Convert TWD to target currency
+              const rateToTarget = liveExchangeRates[converterTargetCurrency] || 1.0;
+              
+              if (rateToTarget === 0) return 0; // Avoid division by zero
+              
+              // 1 Target Currency = X TWD (rateToTarget)
+              // 1 TWD = 1 / rateToTarget Target Currency
+              const targetAmount = amountInTWD / rateToTarget;
+              
+              // 換算結果四捨五入到小數點後兩位 (為了精準度，不像分帳只取整數)
+              return parseFloat(targetAmount.toFixed(2));
+
+          }, [converterAmount, converterSourceCurrency, converterTargetCurrency, liveExchangeRates]);
+
 			// --- 渲染 ---
 			const currentUserLabel = userId ? getDisplayName(userId) : '';
 			const isViewingOwn = currentCollectionId === userId;
@@ -2203,6 +2242,7 @@
 							  title={isReadOnly ? "" : "點擊以修改這本分帳記帳簿名稱"}
 							>
 							  {groupName || '分帳記帳簿'}
+							兩個
 							</h1>
 						  </div>
 						)}
@@ -2252,6 +2292,50 @@
 				  </div>
 				</header>
                 
+                {/* ✨ MODIFIED: 頂部匯率換算器 - 放在 header 之後，功能按鈕之前 */}
+                <div className="mt-4 p-4 bg-white rounded-xl shadow-lg border-b border-primaryColor-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <span className="font-semibold text-gray-700 flex-shrink-0">即時換算:</span>
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-1">
+                        {/* 來源幣別選擇框 (左邊 - 需記錄) */}
+                        <select
+                            value={converterSourceCurrency}
+                            onChange={(e) => setConverterSourceCurrency(e.target.value)}
+                            className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white"
+                        >
+                            {CURRENCIES.map(code => (
+                                <option key={`source-${code}`} value={code}>{code}</option>
+                            ))}
+                        </select>
+                        {/* 金額輸入框 */}
+                        <input
+                            type="number"
+                            value={converterAmount}
+                            onChange={(e) => setConverterAmount(e.target.value)}
+                            placeholder="輸入金額"
+                            className="block w-full sm:w-32 border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500"
+                        />
+                    </div>
+                    
+                    {/* 輸出結果 */}
+                    <div className="flex items-center space-x-1 sm:ml-4 flex-shrink-0 mt-2 sm:mt-0">
+                        <span className="text-gray-500 text-sm">→ 換算至</span>
+                        {/* 目標幣別選擇框 (右邊 - 預設 TWD, 不記錄) */}
+                        <select
+                            value={converterTargetCurrency}
+                            onChange={(e) => setConverterTargetCurrency(e.target.value)}
+                            className="block flex-shrink-0 w-auto border border-gray-300 rounded-lg shadow-sm p-2 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 bg-white font-bold"
+                        >
+                            {CURRENCIES.map(code => (
+                                <option key={`target-${code}`} value={code}>{code}</option>
+                            ))}
+                        </select>
+                        <span className="text-xl font-bold text-primaryColor-600">
+                            {convertedAmount.toLocaleString('zh-TW')}
+                        </span>
+                    </div>
+                </div>
+
+
                 {/* 錯誤訊息提示 (App層級) */}
                 {error && (
                     <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
@@ -2403,39 +2487,38 @@
               
             return (
               <div className="mt-8">
+                {/* 1. 支出列表標題與清除按鈕 - 保持在同一行 */}
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-800 flex items-center">
                     <CircleDollarSign className="w-7 h-7 mr-3 text-primaryColor-500" /> 
                     所有支出 ({expenses.length})
                   </h2>
                   
-                  {/* ✨ NEW: 搜尋欄位與清除按鈕 */}
-                  <div className="flex items-center space-x-2">
-                    {/* 搜尋欄位 (小螢幕時自動隱藏文字並縮小) */}
+                  {/* 清除所有資料按鈕 */}
+                  <button
+                      onClick={clearAllExpenses}
+                      disabled={isLoading || isReadOnly || expenses.length === 0}
+                      className="px-3 py-1.5 text-sm rounded-lg text-white bg-red-500 hover:bg-red-600 transition hover:scale-105 transform shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center flex-shrink-0"
+                  >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      清除所有資料
+                  </button>
+                </div>
+                
+                {/* ✨ NEW: 搜尋欄位 - 獨立出來，在標題下方，清單上方 */}
+                <div className="mb-4">
                     <div className="relative">
                       <input
                         type="text"
                         value={searchKeyword}
                         onChange={(e) => setSearchKeyword(e.target.value)}
-                        placeholder="" 
-                        // w-10 是為了在沒有輸入時只顯示放大鏡和圓形，focus 時展開
-                        className="w-10 sm:w-48 border border-gray-300 rounded-full h-10 py-2 pl-10 pr-4 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 transition-all duration-300 focus:w-48 sm:focus:w-64"
+                        placeholder="輸入品項/描述進行搜尋..." 
+                        // 讓它保持全寬
+                        className="w-full border border-gray-300 rounded-full h-10 py-2 pl-10 pr-4 text-sm focus:ring-primaryColor-500 focus:border-primaryColor-500 transition-all duration-300"
                         aria-label="搜尋支出"
                       />
                       <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
                     </div>
-                    
-                    {/* 清除所有資料按鈕 */}
-                    <button
-                        onClick={clearAllExpenses}
-                        disabled={isLoading || isReadOnly || expenses.length === 0}
-                        className="px-3 py-1.5 text-sm rounded-lg text-white bg-red-500 hover:bg-red-600 transition hover:scale-105 transform shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
-                    >
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        清除所有資料
-                    </button>
-                  </div>
-                  
                 </div>
                 
                 {/* 顯示搜尋結果數量提示 */}
@@ -2522,8 +2605,8 @@
                 <h2 className="text-2xl font-bold mb-4 text-gray-800 flex items-center">
                   <Users className="w-7 h-7 mr-3 text-primaryColor-500" />
                   結餘總結 
-                </h2>
-
+                </h2
+>
                 {settlements.length === 0 ? (
                     <p className="text-lg font-medium text-green-600 p-3 bg-green-50 rounded-lg">🎉 所有帳目已結清！</p>
                 ) : (
