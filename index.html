@@ -1,4 +1,77 @@
-<script type="text/babel">
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>分帳記帳簿</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        /* 修正：移除輸入框原生的增減控制項 */
+        input[type='number'] {
+            -moz-appearance: textfield;
+        }
+        input[type='number']::-webkit-inner-spin-button,
+        input[type='number']::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* ✨ NEW: 修正 Modal 閃爍問題，針對 Safari/WebKit 優化 */
+        .force-gpu {
+            /* 讓瀏覽器推到獨立圖層，解決背景閃爍 */
+            transform: translateZ(0);
+            /* 告訴瀏覽器準備變化，避免重新計算 */
+            will-change: transform; 
+        }
+    </style>
+    
+    <script>
+        // 設定 Tailwind CSS 顏色
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primaryColor: {
+                            500: '#14b8a6', // teal-500
+                            600: '#0d9488', // teal-600
+                            700: '#0f766e', // teal-700
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // 修正：將這些變數定義在純 JS 區塊，使 Babel 腳本可以訪問
+        const __app_id = "YOUR_APP_ID"; // 例如: 'my-splitwise-app-2025'
+        // 請替換成您自己的 Firebase 專案配置 JSON
+        const __firebase_config = JSON.stringify({
+            apiKey: "AIzaSyANDhJ--MDYI5SfsHOuuQwVM0sYMM91UFM",
+            authDomain: "splite-expense-tracker-multi.firebaseapp.com",
+            projectId: "splite-expense-tracker-multi",
+            storageBucket: "splite-expense-tracker-multi.firebasestorage.app",
+            messagingSenderId: "10696910340",
+            appId: "1:10696910340:web:2ccda0f7db8ef8af6f3751",
+            measurementId: "G-XCB90NSB43"
+        });
+        // 匿名登入不再使用，故不需要 __initial_auth_token
+
+        // 新增：請將您的 Gemini API Key 填入此處（目前未使用）
+        const GEMINI_API_KEY = ""; 
+    </script>
+
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore-compat.js"></script>
+    
+    <script type="text/babel">
         // 明確聲明 React 為全域變數，確保 Babel 能夠找到它
         const React = window.React;
         const { useState, useEffect, useCallback, useMemo } = React;
@@ -261,23 +334,22 @@
         /**
          * 認證模態視窗
          */
-        // ✨ MODIFIED: 新增 guestSignIn 和 isAppLoading props
-        const AuthModal = React.memo(({ auth, db, setToastMessage, guestSignIn, isLoading: isAppLoading }) => { 
+        const AuthModal = React.memo(({ auth, db, setToastMessage, isOpen, onClose }) => { // MODIFIED: 接受控制屬性
+            if (!isOpen) return null; // NEW: 檢查是否開啟
+            
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [nickname, setNickname] = useState('');
             const [isLogin, setIsLogin] = useState(true);
-            const [isLoadingModal, setIsLoadingModal] = useState(false); // Renamed local state to avoid conflict
-
-            const combinedLoading = isAppLoading || isLoadingModal; // Combine global and local loading state
+            const [isLoading, setIsLoading] = useState(false);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                setIsLoadingModal(true);
+                setIsLoading(true);
 
                 if (!email || !password || (!isLogin && !nickname)) {
                     setToastMessage('❌ 請輸入所有必填欄位。'); 
-                    setIsLoadingModal(false);
+                    setIsLoading(false);
                     return;
                 }
 
@@ -300,6 +372,7 @@
                     }
                     
                     setToastMessage(`✅ 登入成功！歡迎 ${finalDisplayName}。`);
+                    onClose(); // MODIFIED: 成功後關閉 Modal
 
                 } catch (e) {
                     console.error("Auth error:", e.code, e.message);
@@ -316,13 +389,16 @@
                     setToastMessage(`❌ 登入/註冊失敗: ${displayError}`); 
 
                 } finally {
-                    setIsLoadingModal(false);
+                    setIsLoading(false);
                 }
             };
 
             return (
                 <div className="fixed inset-0 bg-gray-900 bg-opacity-95 flex items-center justify-center p-4 z-50 force-gpu">
-                    <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 sm:p-8 force-gpu">
+                    <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 sm:p-8 force-gpu relative">
+                        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 text-gray-600 transition hover:scale-110 transform">
+                            <X className="w-6 h-6" />
+                        </button>
                         <h3 className="text-3xl font-bold text-primaryColor-600 text-center mb-6">
                             {isLogin ? '登入紀錄簿' : '註冊新帳號'}
                         </h3>
@@ -339,7 +415,7 @@
                                         onChange={(e) => setNickname(e.target.value)}
                                         placeholder="請輸入您的暱稱"
                                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                        disabled={combinedLoading}
+                                        disabled={isLoading}
                                         required={!isLogin}
                                     />
                                 </div>
@@ -354,7 +430,7 @@
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="your.email@example.com"
                                     className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                    disabled={combinedLoading}
+                                    disabled={isLoading}
                                 />
                             </div>
                             <div>
@@ -366,19 +442,19 @@
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="******"
                                     className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                    disabled={combinedLoading}
+                                    disabled={isLoading}
                                     minLength="6"
                                 />
                             </div>
                             <button
                                 type="submit"
-                                disabled={combinedLoading}
+                                disabled={isLoading}
                                 className={
                                     "w-full flex items-center justify-center px-4 py-3 rounded-full text-white font-semibold transition duration-300 shadow-lg " +
-                                    (combinedLoading ? "bg-gray-400 cursor-not-allowed" : "bg-primaryColor-600 hover:bg-primaryColor-700")
+                                    (isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-primaryColor-600 hover:bg-primaryColor-700")
                                 }
                             >
-                                {combinedLoading ? '處理中...' : (isLogin ? '登入' : '註冊')}
+                                {isLoading ? '處理中...' : (isLogin ? '登入' : '註冊')}
                             </button>
                         </form>
 
@@ -389,21 +465,6 @@
                             >
                                 {isLogin ? '還沒有帳號？點此註冊' : '已經有帳號了？點此登入'}
                             </button>
-                            
-                            {/* ✨ NEW: 訪客登入按鈕 */}
-                            <div className="mt-4 pt-4 border-t border-gray-200">
-                                <button
-                                    onClick={guestSignIn}
-                                    disabled={combinedLoading}
-                                    type="button" 
-                                    className={
-                                        "w-full flex items-center justify-center px-4 py-3 rounded-full text-primaryColor-600 font-semibold transition duration-300 shadow-md border border-primaryColor-300 hover:bg-primaryColor-50 " +
-                                        (combinedLoading ? "opacity-50 cursor-not-allowed" : "")
-                                    }
-                                >
-                                    {combinedLoading ? '載入中...' : '以訪客身份進入 (免註冊)'}
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -872,12 +933,12 @@
                 }
             };
             
-            const handleMemberDeleteWrapper = async (nameToDelete) => {
+            const handleMemberDeleteWrapper = async (member) => {
                 if (isReadOnly) {
                     setModalMessage('❌ 唯讀模式下無法刪除成員。'); 
                     return;
                 }
-                await handleDeleteMember(nameToDelete, setModalMessage); // 傳遞 setModalMessage
+                await handleDeleteMember(member, setModalMessage); // 傳遞 setModalMessage
             };
             
             const handleSaveDefaultSharesWrapper = async (tempShares) => {
@@ -956,7 +1017,7 @@
 							<div className="border p-4 rounded-lg bg-gray-50 flex-shrink-0">
 							  <h4 className="font-semibold text-lg mb-2 flex items-center text-primaryColor-700">
 								<Users className="w-5 h-5 mr-2" />
-								管理分帳成員與共享權限
+								管理分帳成員與共享權限 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}
 							  </h4>
 
 							  {/* 單一輸入框：名稱 or Email */}
@@ -1019,7 +1080,8 @@
 										  <button
 											type="button"
 											onClick={() => removeGroupMember(uid, setModalMessage)} // 傳遞 setModalMessage
-											className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50"
+											className="ml-2 px-2 py-0.5 text-[11px] rounded-md border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                            disabled={isReadOnly}
 										  >
 											移除
 										  </button>
@@ -1033,7 +1095,7 @@
 
                           {/* 現有成員列表 */}
                           <div>
-                              <h4 className="font-semibold text-lg mb-3 text-gray-700">設定所有成員的預設份數</h4>
+                              <h4 className="font-semibold text-lg mb-3 text-gray-700">設定所有成員的預設份數 {isReadOnly && <span className="text-red-500 ml-2">(唯讀)</span>}</h4>
                               <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3 text-sm font-semibold text-gray-600 border-b pb-2">
                                 <span>成員名稱</span>
                                 <span className="flex items-center justify-between">預設份數</span>
@@ -1057,7 +1119,7 @@
                                                   }}
                                               >
                                                   {getDisplayName(member)}
-                                                  {isCustomName && <span className="ml-2 text-red-500 text-xs font-normal"></span>}
+                                                  {isCustomName && <span className="ml-2 text-red-500 text-xs font-normal"> (點擊替換)</span>}
                                               </span>
                                               <div className="flex items-center space-x-2 flex-shrink">
                                                 
@@ -1141,6 +1203,8 @@
           const [auth, setAuth] = useState(null);
           const [userId, setUserId] = useState(null);
           const [authReady, setAuthReady] = useState(false);
+          const [isGuest, setIsGuest] = useState(false); // NEW: 追蹤是否為匿名訪客
+          const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); // NEW: 控制 AuthModal 顯示
           const [userProfiles, setUserProfiles] = useState({});
 		  const [lastExchangeUpdate, setLastExchangeUpdate] = useState(null);
           const [liveExchangeRates, setLiveExchangeRates] = useState(DEFAULT_EXCHANGE_RATES);
@@ -1153,8 +1217,8 @@
 		  const [groupOwner, setGroupOwner] = useState(null);                   // 群組擁有者 uid
 		  const [groupMembers, setGroupMembers] = useState([]);                 // 群組成員 uid 清單
 
-		  // 只要目前登入者不在 groupMembers 裡，就視為唯讀
-		  const isReadOnly = !groupMembers.includes(userId);
+		  // MODIFIED: 訪客模式 (isGuest) 或不在群組成員清單中都視為唯讀
+		  const isReadOnly = isGuest || !groupMembers.includes(userId); 
 		
 		  const [inviteEmail, setInviteEmail] = useState(''); // 用來輸入要邀請的 email
 		  const [groupName, setGroupName] = useState('分帳記帳簿');     // 顯示在上方標題的名稱
@@ -1255,7 +1319,10 @@
               const unsubscribe = _auth.onAuthStateChanged(async (user) => {
                 try {
                   if (user) {
+                    // Persistent user (email/password) or a converted anonymous user
+                    const isAnon = user.isAnonymous; // NEW: 檢查是否為匿名用戶
                     setUserId(user.uid);
+                    setIsGuest(isAnon); // NEW: 設定訪客狀態
 
                     // 1. 先幫登入者自己建立 / 補上短代碼
                     let myShortCode = null;
@@ -1266,7 +1333,9 @@
                         const data = mySnap.data() || {};
                         myShortCode = data.shortCode || null;
                       }
-                      if (!myShortCode) {
+                      
+                      // NEW: 只有非匿名用戶才生成短代碼
+                      if (!myShortCode && !isAnon) { 
                         myShortCode = generateShortCode();
                         await myDocRef.set(
                           {
@@ -1296,6 +1365,9 @@
 
                     let targetCollectionId = user.uid;
                     let targetShortCode = myShortCode || null;
+                    
+                    // If the user is anonymous, they can only view shared groups or their own temporary group.
+                    // We prioritize shared links for all users (including guests).
 
                     if (shortCodeFromPath) {
                       try {
@@ -1309,12 +1381,14 @@
                           targetCollectionId = doc.id;
                           const data = doc.data() || {};
                           targetShortCode = data.shortCode || shortCodeFromPath;
-                        } else {
-                          setError('找不到對應的分帳簿，已切回自己的紀錄簿。');
+                        } else if (isAnon) { // MODIFIED: 訪客模式下找不到就切回訪客預設
+                            setError('找不到對應的分帳簿，已切回訪客模式。');
+                        } else { // MODIFIED: 登入用戶找不到就切回自己的
+                            setError('找不到對應的分帳簿，已切回自己的紀錄簿。');
                         }
                       } catch (err) {
                         console.error('依短代碼尋找分帳簿失敗：', err);
-                        setError('連結載入失敗，已切回自己的紀錄簿。');
+                        setError('連結載入失敗，已切回訪客模式/自己的紀錄簿。'); // MODIFIED
                       }
                     } else if (shareId) {
                       // 舊版連結：?shareId=UID 還是可以用
@@ -1322,14 +1396,73 @@
                       // 清掉舊版 query，避免之後重複解析
                       window.history.replaceState(null, '', url.pathname);
                     }
+                    
+                    // NEW: 只有非匿名用戶才確保預設群組存在
+                    if (!isAnon && targetCollectionId === user.uid) {
+                        await ensureDefaultGroup(_db, user.uid);
+                    }
+
 
                     setCurrentCollectionId((prev) => prev || targetCollectionId);
                     setCurrentCollectionShortCode(targetShortCode);
+                    
                   } else {
-                    setUserId(null);
-                    setCurrentCollectionId(null);
-                    setCurrentCollectionShortCode(null);
+                    // User is signed out. Sign in anonymously for guest view.
+                    const anonUserCredential = await _auth.signInAnonymously();
+                    const anonUser = anonUserCredential.user;
+
+                    setUserId(anonUser.uid);
+                    setIsGuest(true); // NEW: 設為訪客
+                    
+                    // --- 沿用已有的 URL 解析邏輯 ---
+                    const url = new URL(window.location.href);
+                    const urlParams = url.searchParams;
+                    const shareId = urlParams.get('shareId');
+
+                    let shortCodeFromPath = null;
+                    const path = url.pathname || '';
+                    const marker = '/g/';
+                    const idx = path.indexOf(marker);
+                    if (idx !== -1) {
+                        const after = path.slice(idx + marker.length);
+                        shortCodeFromPath = after.split('/')[0] || null;
+                    }
+                    
+                    let targetCollectionId = anonUser.uid; // Default to anon's temporary group
+                    let targetShortCode = null; 
+
+                    if (shortCodeFromPath) {
+                        try {
+                            const snap = await usersRef
+                                .where('shortCode', '==', shortCodeFromPath)
+                                .limit(1)
+                                .get();
+                            if (!snap.empty) {
+                                const doc = snap.docs[0];
+                                targetCollectionId = doc.id;
+                                const data = doc.data() || {};
+                                targetShortCode = data.shortCode || shortCodeFromPath;
+                            } else {
+                                setError('找不到對應的分帳簿，已切回訪客模式。');
+                            }
+                        } catch (err) {
+                            console.error('依短代碼尋找分帳簿失敗：', err);
+                            setError('連結載入失敗，已切回訪客模式。');
+                        }
+                    } else if (shareId) {
+                        targetCollectionId = shareId;
+                        window.history.replaceState(null, '', url.pathname);
+                    }
+
+                    setCurrentCollectionId(targetCollectionId);
+                    setCurrentCollectionShortCode(targetShortCode);
                   }
+                } catch (e) {
+                    // Handle anonymous sign-in failure (e.g., Firebase config issue)
+                    console.error('Auth error during sign-in/anonymous fallback:', e);
+                    setUserId(null);
+                    setIsGuest(false);
+                    setError(`認證失敗，應用程式無法運作: ${e.message}`);
                 } finally {
                   setAuthReady(true);
                 }
@@ -1466,6 +1599,7 @@
 				closeConfirmModal();
 				try {
 				  await auth.signOut();
+				  // Note: signOut will trigger onAuthStateChanged to run the anonymous login fallback
 				  setExpenses([]);
 				  setCustomMembers([]);
 				  setDefaultSharesConfig({});
@@ -1488,29 +1622,11 @@
 			  setDefaultSharesConfig,
 			  setError
 			]);
-            
-            // ✨ NEW: 訪客登入
-            const guestSignIn = useCallback(async () => {
-                if (!auth) return;
-
-                setIsLoading(true);
-                setError(null);
-                try {
-                    // 使用匿名登入
-                    await auth.signInAnonymously();
-                    setToastMessage('✅ 訪客登入成功！');
-                } catch (e) {
-                    console.error('Anonymous sign-in failed:', e);
-                    setToastMessage(`❌ 訪客登入失敗: ${e.message}`);
-                } finally {
-                    setIsLoading(false);
-                }
-            }, [auth, setToastMessage, setIsLoading, setError]);
-
 
           // --- 4. 數據獲取 (Firestore 監聽) ---
           useEffect(() => {
-            if (!authReady || !db || !currentCollectionId) return; 
+            // FIX: 只要不是完全未就緒，就允許載入 (即使是訪客模式，也需要 userId 和 currentCollectionId)
+            if (!authReady || !db || !currentCollectionId || !userId) return; 
 
             const expensesCollectionPath = getGroupExpensesPath(currentCollectionId);
 			const expensesRef = db.collection(expensesCollectionPath);
@@ -1570,12 +1686,31 @@
               unsubscribeExpenses();
               unsubscribeMembers();
             };
-          }, [authReady, db, currentCollectionId]);
+          }, [authReady, db, currentCollectionId, userId]); // FIX: Add userId dependency
 
           // --- 5. 衍生成員清單 ---
 			useEffect(() => {
-			  let currentMembers = [currentCollectionId].filter(Boolean); 
-			  
+			  // 只有非訪客模式下，才將自己的 UID 作為預設成員
+			  let currentMembers = [].filter(Boolean);
+              
+              // 訪客模式下，不應預設自己的臨時 UID 作為分帳成員，除非它是群組的 ID
+              if (!isGuest && currentCollectionId) {
+                  currentMembers.push(currentCollectionId);
+              } else if (isGuest && currentCollectionId && currentCollectionId.length < 20) {
+                 // 如果是訪客模式，但 URL 上帶了短名稱 ID (例如: 小明)，讓它先成為初始成員
+                 // 但這裡的 currentCollectionId 應是 group owner 的 UID，所以這邏輯應為多餘
+                 // 保險起見，讓 currentCollectionId (group owner UID) 總是被包含，即使是訪客
+                 currentMembers.push(currentCollectionId);
+              }
+
+              // 確保所有有編輯權限的 UID 都在成員清單中 (即使他們沒有暱稱或不在 customMembers)
+              groupMembers.forEach(uid => {
+                  if (!currentMembers.includes(uid)) {
+                      currentMembers.push(uid);
+                  }
+              });
+
+              // 將自訂成員加入清單
 			  customMembers.forEach(name => {
 				if (name !== currentCollectionId && !currentMembers.includes(name)) {
 				  currentMembers.push(name);
@@ -1583,7 +1718,7 @@
 			  });
 
 			  setMembers(currentMembers);
-			}, [currentCollectionId, customMembers]);
+			}, [currentCollectionId, customMembers, isGuest, groupMembers]); // FIX: Added isGuest, groupMembers dependency
 
           const getInitialShares = useCallback(() => {
             return members.reduce((acc, name) => {
@@ -1667,7 +1802,7 @@
             };
             
             openConfirmModal('確認刪除支出', '您確定要刪除這筆支出記錄嗎？此操作無法撤銷。', onConfirm);
-          }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
+          }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal, setError, setIsLoading]);
 
           const clearAllExpenses = useCallback(async () => {
               if (isReadOnly) {
@@ -1702,7 +1837,7 @@
                   '您確定要刪除此記帳簿中的所有支出記錄嗎？', 
                   onConfirm
               );
-          }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal]);
+          }, [db, currentCollectionId, isReadOnly, openConfirmModal, closeConfirmModal, setError, setIsLoading]);
 
           // --- 7. 成員管理 ---
           const saveMembers = useCallback(async (newMemberList) => {
@@ -1734,13 +1869,13 @@
             } finally {
                 setIsLoading(false);
             }
-          }, [db, currentCollectionId, isReadOnly, members, defaultSharesConfig]);
+          }, [db, currentCollectionId, isReadOnly, members, defaultSharesConfig, setError, setIsLoading]);
 
 			// 透過 email 邀請使用者加入這個群組（有編輯權）
 			// NEW: 傳入 setModalMessage
 			const inviteUserByEmail = React.useCallback(
 			  async (emailToInviteRaw, setModalMessage) => { 
-				if (!db || !currentCollectionId) return;
+				if (!db || !currentCollectionId || isReadOnly) return;
 				const emailToInvite = (emailToInviteRaw || '').trim().toLowerCase();
 				if (!emailToInvite) return;
 
@@ -1809,7 +1944,7 @@
 				  setInviteEmail('');
 				  let successMessage = `✅ 已成功邀請成員: ${invitedDisplayName}`;
 				  if (removedOldName) { // <-- NEW: 根據是否移除舊名稱顯示不同訊息
-					  successMessage += `，並已自動移除您之前建立的重複名稱「${removedOldName}」`;
+					  successMessage += `，並已自動移除您之前建立的重複名稱「${removedOldName}」。`;
 				  }
 				  setModalMessage(successMessage); // 成功 Modal Message
 				  console.log(
@@ -1822,7 +1957,7 @@
 				  setIsLoading(false);
 				}
 			  },
-			  [db, currentCollectionId, customMembers, saveMembers, groupMembers, userProfiles, getDisplayName]
+			  [db, currentCollectionId, customMembers, saveMembers, groupMembers, userProfiles, getDisplayName, isReadOnly, setError, setIsLoading]
 			);
 
 			// 從群組中移除成員（同時從分帳成員名單中移除）
@@ -1900,7 +2035,7 @@
                 onConfirm
             );
 
-          }, [customMembers, saveMembers, isReadOnly, openConfirmModal, closeConfirmModal, getDisplayName]);
+          }, [customMembers, saveMembers, isReadOnly, openConfirmModal, closeConfirmModal, getDisplayName, setError, setIsLoading]);
 
           // NEW: 讓 handleSaveDefaultShares 回傳訊息給 Modal
           const handleSaveDefaultShares = useCallback(async (tempShares, setModalMessage) => {
@@ -1932,7 +2067,7 @@
             } finally {
                 setIsLoading(false);
             }
-          }, [db, currentCollectionId, customMembers, members, isReadOnly]);
+          }, [db, currentCollectionId, customMembers, members, isReadOnly, setError, setIsLoading]);
           
           
         // --- 11. 成員 ID 遷移/替換功能 ---
@@ -2105,7 +2240,7 @@
                   'green'
               );
 
-          }, [db, userId, currentCollectionId, isReadOnly, getDisplayName, openConfirmModal, closeConfirmModal, setToastMessage]);
+          }, [db, userId, currentCollectionId, isReadOnly, getDisplayName, openConfirmModal, closeConfirmModal, setToastMessage, setError, setIsLoading]);
 
           // --- 9. 分帳計算 ---
           const calculateBalances = useMemo(() => {
@@ -2201,11 +2336,14 @@
             
             if (memberId === userId) {
                 const currentUser = auth?.currentUser;
-                // ✨ MODIFIED: 匿名登入顯示「訪客」
+                const displayName = currentUser?.displayName || currentUser?.email;
+                
+                // NEW: 針對匿名用戶顯示訪客名稱
                 if (currentUser?.isAnonymous) {
                     return '訪客 (Guest)';
                 }
-                return currentUser?.displayName || currentUser?.email || '我 (You)';
+                
+                return displayName || '我 (You)';
             }
             
             if (memberId === currentCollectionId && memberId) {
@@ -2260,11 +2398,11 @@
 
 			// --- 渲染 ---
 			const currentUserLabel = userId ? getDisplayName(userId) : '';
-			const isViewingOwn = currentCollectionId === userId;
+			const isViewingOwn = currentCollectionId === userId && !isGuest; // MODIFIED: 訪客模式不算 viewing own
 
 			// 複製分享連結（移到 header 使用）
 			const handleCopyShareLink = React.useCallback(() => {
-			  if (!userId || !currentCollectionId || !currentCollectionShortCode) return;
+			  if (!userId || !currentCollectionId || !currentCollectionShortCode || isGuest) return; // MODIFIED: 訪客不能複製
 
 			  // 修正為複製短代碼路徑連結
 			  const url = new URL(window.location.href);
@@ -2294,7 +2432,7 @@
 			  }
 
 			  document.body.removeChild(tempInput);
-			}, [userId, currentCollectionId, currentCollectionShortCode, setToastMessage]);
+			}, [userId, currentCollectionId, currentCollectionShortCode, setToastMessage, isGuest]);
 
 			// 返回自己的記帳簿（加入 confirm modal）
 			const handleReturnToOwn = React.useCallback(() => {
@@ -2375,14 +2513,18 @@
           if (!authReady) {
             return (
                 <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                    <p className="text-lg text-primaryColor-600">讀取中...</p>
+                    <p className="text-lg text-primaryColor-600">應用程式啟動中...</p>
                 </div>
             );
           }
           
           if (!userId || !auth) {
-            // ✨ MODIFIED: 傳遞 guestSignIn 和 isLoading prop
-            return <AuthModal auth={auth} db={db} setToastMessage={setToastMessage} guestSignIn={guestSignIn} isLoading={isLoading} />;
+            // 這應該不會被觸發，因為在 onAuthStateChanged 內已確保 userId 存在 (匿名登入)
+            return (
+                <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+                    <p className="text-lg text-red-600">認證服務錯誤，無法啟動應用程式。</p>
+                </div>
+            );
           }
 
 		  return (
@@ -2472,32 +2614,49 @@
 					  </p>
 					</div>
 
-					{/* 右上角：登出 / 返回自己的記帳簿 */}
+					{/* 右上角：登出 / 返回自己的記帳簿 / 註冊登入 */}
 					<div className="flex flex-col items-end gap-1">
-					  {isViewingOwn ? (
-						<button
-						  onClick={logout}
-						  className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-red-600 border border-red-300 hover:bg-red-50 transition"
-						  title="登出"
-						>
-						  <LogOut className="w-4 h-4 mr-1" />
-						  <span className="inline">登出</span>
-						</button>
+					  {isGuest ? (
+					    // Guest Mode: Show Register/Login
+					    <button
+					      onClick={() => setIsAuthModalOpen(true)}
+					      className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-primaryColor-600 border border-primaryColor-300 bg-white hover:bg-primaryColor-50 transition"
+					      title="註冊/登入以獲得完整功能"
+					    >
+					      {/* 使用 LogOut 圖標並旋轉 180 度模擬登入箭頭 */}
+					      <LogOut className="w-4 h-4 mr-1 transform rotate-180" /> 
+					      <span className="inline">註冊/登入</span>
+					    </button>
+					  ) : isViewingOwn ? (
+					    // Logged in, viewing own group: Show Logout
+					    <button
+					      onClick={logout}
+					      className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-red-600 border border-red-300 hover:bg-red-50 transition"
+					      title="登出"
+					    >
+					      <LogOut className="w-4 h-4 mr-1" />
+					      <span className="inline">登出</span>
+					    </button>
 					  ) : (
-						<button
-						  onClick={handleReturnToOwn}
-						  className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-primaryColor-700 border border-primaryColor-300 hover:bg-primaryColor-50 transition"
-						>
-						  返回自己的記帳簿
-						</button>
-						)}
+					    // Logged in, viewing shared group: Show Return to Own
+					    <button
+					      onClick={handleReturnToOwn}
+					      className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-primaryColor-700 border border-primaryColor-300 hover:bg-primaryColor-50 transition"
+					    >
+					      返回自己的記帳簿
+					    </button>
+					  )}
 
 					    {/* 分享按鈕：移到登出下面 */}
 					    <button
 						  type="button"
 						  onClick={handleCopyShareLink}
-						  className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-primaryColor-700 border border-primaryColor-400 bg-white hover:bg-primaryColor-50 transition"
-						  title="生成並複製這本記帳簿的分享連結"
+						  disabled={isGuest}
+						  className={
+                            "mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold border bg-white transition " +
+                            (isGuest ? "text-gray-400 border-gray-300 cursor-not-allowed" : "text-primaryColor-700 border-primaryColor-400 hover:bg-primaryColor-50")
+                          }
+						  title={isGuest ? "請登入後再分享" : "生成並複製這本記帳簿的分享連結"}
 					    >
 						  <Share2 className="w-4 h-4 mr-1" />
 						  點擊複製連結
@@ -2671,6 +2830,18 @@
                     confirmText={confirmModalState.confirmText}
                     confirmColor={confirmModalState.confirmColor}
                 />
+
+                {/* NEW: 訪客模式下的註冊/登入 Modal */}
+                {isGuest && (
+                    <AuthModal 
+                       auth={auth} 
+                       db={db} 
+                       setToastMessage={setToastMessage} 
+                       isOpen={isAuthModalOpen} 
+                       onClose={() => setIsAuthModalOpen(false)} 
+                     />
+                 )}
+
               </div>
 
               {/* Tailwind color class fix, 讓 primaryColor 類別一定出現在檔案中 */}
@@ -2716,6 +2887,7 @@
                       onClick={clearAllExpenses}
                       disabled={isLoading || isReadOnly || expenses.length === 0}
                       className="px-3 py-1.5 text-sm rounded-lg text-white bg-red-500 hover:bg-red-600 transition hover:scale-105 transform shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center flex-shrink-0"
+                      title={isReadOnly ? "唯讀模式下無法清除資料" : "清除此紀錄簿所有支出"}
                   >
                       <Trash2 className="w-4 h-4 mr-1" />
                       清除所有資料
@@ -2785,6 +2957,7 @@
                               className="p-2 text-blue-500 bg-white hover:bg-blue-50 rounded-full transition duration-150 hover:scale-110 transform border border-transparent hover:border-blue-300 shadow-md disabled:cursor-not-allowed"
                               aria-label="編輯支出"
                               disabled={isReadOnly}
+                              title={isReadOnly ? "唯讀模式下無法編輯" : "編輯支出"}
                             >
                               <Pencil className="w-5 h-5" />
                             </button>
@@ -2793,6 +2966,7 @@
                               disabled={isLoading || isReadOnly}
                               className="p-2 text-red-500 bg-white hover:bg-blue-50 rounded-full transition duration-150 hover:scale-110 transform border border-transparent hover:border-red-300 shadow-md disabled:cursor-not-allowed"
                               aria-label="刪除支出"
+                              title={isReadOnly ? "唯讀模式下無法刪除" : "刪除支出"}
                             >
                               <Trash2 className="w-5 h-5" />
                             </button>
@@ -2855,13 +3029,14 @@
                                         <button
                                             onClick={() => settleMemberDebt(settlement.from, settlement.amount, settlement.to)} 
                                             className="px-3 py-1 text-sm rounded-lg text-white transition hover:scale-105 transform shadow-md flex items-center bg-green-500 hover:bg-green-600"
+                                            title="新增一筆結清支出記錄"
                                         >
                                             <CircleCheck className="w-4 h-4 mr-1" />
                                             結清
                                         </button>
                                     )}
                                     {isReadOnly && (
-                                         <span className="text-sm text-gray-500 italic">僅擁有者可操作</span>
+                                         <span className="text-sm text-gray-500 italic">僅成員可操作</span>
                                     )}
                                 </div>
                             );
@@ -2876,3 +3051,5 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
+</body>
+</html>
