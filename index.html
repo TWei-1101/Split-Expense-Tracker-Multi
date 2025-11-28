@@ -1,77 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>分帳記帳簿</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <style>
-        /* 修正：移除輸入框原生的增減控制項 */
-        input[type='number'] {
-            -moz-appearance: textfield;
-        }
-        input[type='number']::-webkit-inner-spin-button,
-        input[type='number']::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        /* ✨ NEW: 修正 Modal 閃爍問題，針對 Safari/WebKit 優化 */
-        .force-gpu {
-            /* 讓瀏覽器推到獨立圖層，解決背景閃爍 */
-            transform: translateZ(0);
-            /* 告訴瀏覽器準備變化，避免重新計算 */
-            will-change: transform; 
-        }
-    </style>
-    
-    <script>
-        // 設定 Tailwind CSS 顏色
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primaryColor: {
-                            500: '#14b8a6', // teal-500
-                            600: '#0d9488', // teal-600
-                            700: '#0f766e', // teal-700
-                        },
-                    },
-                }
-            }
-        }
-    </script>
-</head>
-<body>
-    <div id="root"></div>
-
-    <script>
-        // 修正：將這些變數定義在純 JS 區塊，使 Babel 腳本可以訪問
-        const __app_id = "YOUR_APP_ID"; // 例如: 'my-splitwise-app-2025'
-        // 請替換成您自己的 Firebase 專案配置 JSON
-        const __firebase_config = JSON.stringify({
-            apiKey: "AIzaSyANDhJ--MDYI5SfsHOuuQwVM0sYMM91UFM",
-            authDomain: "splite-expense-tracker-multi.firebaseapp.com",
-            projectId: "splite-expense-tracker-multi",
-            storageBucket: "splite-expense-tracker-multi.firebasestorage.app",
-            messagingSenderId: "10696910340",
-            appId: "1:10696910340:web:2ccda0f7db8ef8af6f3751",
-            measurementId: "G-XCB90NSB43"
-        });
-        // 匿名登入不再使用，故不需要 __initial_auth_token
-
-        // 新增：請將您的 Gemini API Key 填入此處（目前未使用）
-        const GEMINI_API_KEY = ""; 
-    </script>
-
-    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore-compat.js"></script>
-    
-    <script type="text/babel">
+<script type="text/babel">
         // 明確聲明 React 為全域變數，確保 Babel 能夠找到它
         const React = window.React;
         const { useState, useEffect, useCallback, useMemo } = React;
@@ -334,20 +261,23 @@
         /**
          * 認證模態視窗
          */
-        const AuthModal = React.memo(({ auth, db, setToastMessage }) => { 
+        // ✨ MODIFIED: 新增 guestSignIn 和 isAppLoading props
+        const AuthModal = React.memo(({ auth, db, setToastMessage, guestSignIn, isLoading: isAppLoading }) => { 
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [nickname, setNickname] = useState('');
             const [isLogin, setIsLogin] = useState(true);
-            const [isLoading, setIsLoading] = useState(false);
+            const [isLoadingModal, setIsLoadingModal] = useState(false); // Renamed local state to avoid conflict
+
+            const combinedLoading = isAppLoading || isLoadingModal; // Combine global and local loading state
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                setIsLoading(true);
+                setIsLoadingModal(true);
 
                 if (!email || !password || (!isLogin && !nickname)) {
                     setToastMessage('❌ 請輸入所有必填欄位。'); 
-                    setIsLoading(false);
+                    setIsLoadingModal(false);
                     return;
                 }
 
@@ -386,7 +316,7 @@
                     setToastMessage(`❌ 登入/註冊失敗: ${displayError}`); 
 
                 } finally {
-                    setIsLoading(false);
+                    setIsLoadingModal(false);
                 }
             };
 
@@ -409,7 +339,7 @@
                                         onChange={(e) => setNickname(e.target.value)}
                                         placeholder="請輸入您的暱稱"
                                         className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                        disabled={isLoading}
+                                        disabled={combinedLoading}
                                         required={!isLogin}
                                     />
                                 </div>
@@ -424,7 +354,7 @@
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="your.email@example.com"
                                     className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                    disabled={isLoading}
+                                    disabled={combinedLoading}
                                 />
                             </div>
                             <div>
@@ -436,19 +366,19 @@
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="******"
                                     className="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-primaryColor-500 focus:border-primaryColor-500"
-                                    disabled={isLoading}
+                                    disabled={combinedLoading}
                                     minLength="6"
                                 />
                             </div>
                             <button
                                 type="submit"
-                                disabled={isLoading}
+                                disabled={combinedLoading}
                                 className={
                                     "w-full flex items-center justify-center px-4 py-3 rounded-full text-white font-semibold transition duration-300 shadow-lg " +
-                                    (isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-primaryColor-600 hover:bg-primaryColor-700")
+                                    (combinedLoading ? "bg-gray-400 cursor-not-allowed" : "bg-primaryColor-600 hover:bg-primaryColor-700")
                                 }
                             >
-                                {isLoading ? '處理中...' : (isLogin ? '登入' : '註冊')}
+                                {combinedLoading ? '處理中...' : (isLogin ? '登入' : '註冊')}
                             </button>
                         </form>
 
@@ -459,6 +389,21 @@
                             >
                                 {isLogin ? '還沒有帳號？點此註冊' : '已經有帳號了？點此登入'}
                             </button>
+                            
+                            {/* ✨ NEW: 訪客登入按鈕 */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <button
+                                    onClick={guestSignIn}
+                                    disabled={combinedLoading}
+                                    type="button" 
+                                    className={
+                                        "w-full flex items-center justify-center px-4 py-3 rounded-full text-primaryColor-600 font-semibold transition duration-300 shadow-md border border-primaryColor-300 hover:bg-primaryColor-50 " +
+                                        (combinedLoading ? "opacity-50 cursor-not-allowed" : "")
+                                    }
+                                >
+                                    {combinedLoading ? '載入中...' : '以訪客身份進入 (免註冊)'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -927,12 +872,12 @@
                 }
             };
             
-            const handleMemberDeleteWrapper = async (member) => {
+            const handleMemberDeleteWrapper = async (nameToDelete) => {
                 if (isReadOnly) {
                     setModalMessage('❌ 唯讀模式下無法刪除成員。'); 
                     return;
                 }
-                await handleDeleteMember(member, setModalMessage); // 傳遞 setModalMessage
+                await handleDeleteMember(nameToDelete, setModalMessage); // 傳遞 setModalMessage
             };
             
             const handleSaveDefaultSharesWrapper = async (tempShares) => {
@@ -979,9 +924,6 @@
                                     <h4 className="font-semibold text-lg mb-2 text-red-700">
                                         將「{getDisplayName(nameToReplace)}」替換為哪個帳號？
                                     </h4>
-                                    <p className="text-sm text-red-600 mb-3">
-                                        選擇後，所有與「{getDisplayName(nameToReplace)}」相關的記錄（付款人、分帳份數、預設份數）都會**永久**轉移到該帳號的 ID 上，並從分帳清單中移除「{getDisplayName(nameToReplace)}」。
-                                    </p>
                                     
                                     <div className="flex gap-2 flex-wrap">
                                         {availableUidsForReplace.length === 0 ? (
@@ -1546,6 +1488,25 @@
 			  setDefaultSharesConfig,
 			  setError
 			]);
+            
+            // ✨ NEW: 訪客登入
+            const guestSignIn = useCallback(async () => {
+                if (!auth) return;
+
+                setIsLoading(true);
+                setError(null);
+                try {
+                    // 使用匿名登入
+                    await auth.signInAnonymously();
+                    setToastMessage('✅ 訪客登入成功！');
+                } catch (e) {
+                    console.error('Anonymous sign-in failed:', e);
+                    setToastMessage(`❌ 訪客登入失敗: ${e.message}`);
+                } finally {
+                    setIsLoading(false);
+                }
+            }, [auth, setToastMessage, setIsLoading, setError]);
+
 
           // --- 4. 數據獲取 (Firestore 監聽) ---
           useEffect(() => {
@@ -1848,7 +1809,7 @@
 				  setInviteEmail('');
 				  let successMessage = `✅ 已成功邀請成員: ${invitedDisplayName}`;
 				  if (removedOldName) { // <-- NEW: 根據是否移除舊名稱顯示不同訊息
-					  successMessage += `，並已自動移除您之前建立的重複名稱「${removedOldName}」。`;
+					  successMessage += `，並已自動移除您之前建立的重複名稱「${removedOldName}」`;
 				  }
 				  setModalMessage(successMessage); // 成功 Modal Message
 				  console.log(
@@ -2090,9 +2051,9 @@
 		        }
 		    };
 		    
-		    const message = `您確定要將所有與「${oldName}」相關的支出記錄和預設設定，都轉移到新成員「${getDisplayName(newId)}」嗎？此操作會**永久修改**過去的資料，無法撤銷。`;
+		    const message = `確認後會將所有與「${oldName}」相關的支出記錄和設定轉移到新成員「${getDisplayName(newId)}」上。`;
 		    
-		    openConfirmModal('確認轉移/替換成員', message, onConfirm, '確認轉移資料', 'red');
+		    openConfirmModal('轉移資料', message, onConfirm, '確認', 'red');
 
 		}, [db, currentCollectionId, isReadOnly, groupMembers, members, openConfirmModal, closeConfirmModal, setIsLoading, setError, getDisplayName]); // <-- FIXED: Removed top-level const functions from dependencies
 
@@ -2240,6 +2201,10 @@
             
             if (memberId === userId) {
                 const currentUser = auth?.currentUser;
+                // ✨ MODIFIED: 匿名登入顯示「訪客」
+                if (currentUser?.isAnonymous) {
+                    return '訪客 (Guest)';
+                }
                 return currentUser?.displayName || currentUser?.email || '我 (You)';
             }
             
@@ -2416,7 +2381,8 @@
           }
           
           if (!userId || !auth) {
-            return <AuthModal auth={auth} db={db} setToastMessage={setToastMessage} />;
+            // ✨ MODIFIED: 傳遞 guestSignIn 和 isLoading prop
+            return <AuthModal auth={auth} db={db} setToastMessage={setToastMessage} guestSignIn={guestSignIn} isLoading={isLoading} />;
           }
 
 		  return (
@@ -2910,5 +2876,3 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
-</body>
-</html>
